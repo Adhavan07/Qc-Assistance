@@ -7,6 +7,35 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 6: Frontend SaaS Application (MVP-1)] — 2026-09-25
+
+### Added
+- **Modern Next.js 16 (App Router) + TypeScript Architecture (`frontend/`)**:
+  - Initialized with React 19, Lucide React icons, Turbopack, and strict TypeScript configurations.
+  - Dark-mode blueprint engineering design system configured in `frontend/src/app/globals.css` with responsive glassmorphic cards, glowing severity accents, custom scrollbars, and engineering grid patterns.
+- **Data Models & API Client (`frontend/src/types/`, `frontend/src/lib/`)**:
+  - `types/index.ts`: Strong typing mirroring FastAPI Pydantic models (`QCRun`, `QCFinding`, `BoundingBox`, `Organization`, `User`, `Severity`).
+  - `lib/api.ts`: Robust API client communicating with FastAPI endpoints (`/auth`, `/documents`, `/qc-runs`, `/organizations`), equipped with graceful fallbacks to high-fidelity engineering mock data for offline preview and demonstration resilience.
+  - `lib/mockData.ts`: Realistic aerospace/industrial drawing datasets (Boeing 777X Avionics Harness Rev D, ABB Industrial Panels, Siemens S7 PLCs) with 6 verified discrepancy findings.
+  - `lib/auth-context.tsx`: Context provider tracking active engineer session, organization details, and dynamic credit metering.
+- **Component Architecture (`frontend/src/components/`)**:
+  - **`Navbar.tsx`**: Top header featuring Spandsons Horizon branding, live AI engine online badge, active standards badges (`IPC-WHMA-A-620D Class 3`, `UL 508A`), dynamic credit counter (`⚡ 248 credits`), and user profile avatar.
+  - **`Sidebar.tsx`**: Navigation menu supporting fluid switching between Dashboard, Manual Ingestion, QC Inspector, Standards Matrix, and Compliance Audit Trail.
+  - **`DashboardView.tsx`**: Executive engineering dashboard featuring 4 KPI metrics (Drawings Checked, First Pass Yield 88.4%, Open Discrepancies by severity, Mean Engine Turnaround 1.84s), defect breakdown bar distribution, standards adherence gauges, and recent inspection data table.
+  - **`UploadView.tsx`**: Drag-and-drop file ingestion zone with multi-format support (`.pdf`, `.dxf`, `.tiff`, `.png`), regulatory standards selector checklist, and interactive 4-stage processing progress simulator (S3 Staging -> OCR/IDR -> Deterministic Rules -> AI Synthesis).
+  - **`SplitScreenViewer.tsx`**:
+    - **Interactive Canvas (60% Pane)**: High-resolution SVG wiring diagram with smooth Pan and Zoom (zoom in/out, fit-to-screen, mouse drag), circuit breaker bank, wiring runs, pin interfaces, and bounding box overlays styled and colored by severity.
+    - **Discrepancy Drawer (40% Pane)**: Filterable findings list sorted by severity with keyword search, standard citations, exact requirement excerpts, extracted diagram evidence, AI recommendations, confidence indicators, and interactive feedback buttons (`[✓ Correct]`, `[✗ False Positive]`, `[? Flag Review]`).
+    - **Synchronized Bidirectional Highlight**: Clicking a bounding box on the schematic automatically scrolls to and selects the card in the drawer; selecting a card highlights and pulses the bounding box on the canvas.
+    - **Report Export Actions**: One-click modal exports for formal PDF compliance reports and Excel XLSX discrepancy matrices.
+  - **`StandardsView.tsx`**: Interactive rule catalog displaying deterministic rule parameters, clause citations, and zero-false-positive acceptance thresholds.
+  - **`AuditLogView.tsx`**: AS9100 / ISO 9001 compliance audit trail logging document uploads, inspections, and feedback actions.
+- **Verification**:
+  - `npm run build` completed with zero TypeScript errors or build warnings on Turbopack.
+  - Full Python test suite verified: **35/35 tests passing**.
+
+---
+
 ## [Phase 5: Asynchronous QC Worker Pipeline] — 2026-09-25
 
 ### Added
