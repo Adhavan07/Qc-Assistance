@@ -43,6 +43,7 @@ class Organization(Base):
     projects: Mapped[List["Project"]] = relationship("Project", back_populates="organization", cascade="all, delete-orphan")
     documents: Mapped[List["Document"]] = relationship("Document", back_populates="organization", cascade="all, delete-orphan")
     qc_runs: Mapped[List["QCRun"]] = relationship("QCRun", back_populates="organization", cascade="all, delete-orphan")
+    processing_jobs: Mapped[List["ProcessingJob"]] = relationship("ProcessingJob", back_populates="organization", cascade="all, delete-orphan")
     audit_logs: Mapped[List["AuditLog"]] = relationship("AuditLog", back_populates="organization", cascade="all, delete-orphan")
 
 
@@ -99,6 +100,7 @@ class Document(Base):
     project: Mapped["Project"] = relationship("Project", back_populates="documents")
     uploader: Mapped[Optional["User"]] = relationship("User", back_populates="uploaded_documents")
     qc_runs: Mapped[List["QCRun"]] = relationship("QCRun", back_populates="document", cascade="all, delete-orphan")
+    processing_jobs: Mapped[List["ProcessingJob"]] = relationship("ProcessingJob", back_populates="document", cascade="all, delete-orphan")
 
 
 class QCRun(Base):
@@ -188,7 +190,33 @@ class AuditLog(Base):
     actor: Mapped[Optional["User"]] = relationship("User")
 
 
+
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_type: Mapped[str] = mapped_column(String(50), default="DOCUMENT_PROCESSING", nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)  # PENDING, PROCESSING, COMPLETED, FAILED, RETRYING
+    current_step: Mapped[str] = mapped_column(String(100), default="QUEUED", nullable=False)
+    progress_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    result_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship("Organization", back_populates="processing_jobs")
+    document: Mapped["Document"] = relationship("Document", back_populates="processing_jobs")
+
+
 # Composite indexes for multi-tenant query acceleration
 Index("idx_doc_org_checksum", Document.organization_id, Document.sha256_checksum)
 Index("idx_qc_runs_org_status", QCRun.organization_id, QCRun.overall_status)
+Index("idx_proc_job_org_status", ProcessingJob.organization_id, ProcessingJob.status)
+Index("idx_proc_job_doc_status", ProcessingJob.document_id, ProcessingJob.status)
 Index("idx_audit_org_action", AuditLog.organization_id, AuditLog.action, AuditLog.created_at)

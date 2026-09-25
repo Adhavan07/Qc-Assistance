@@ -7,6 +7,51 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 4: Document Processing] — 2026-09-25
+
+### Added
+- **Asynchronous & Synchronous Document Processing Pipeline (`backend/src/services/document_processor.py`)**:
+  - `DocumentProcessor` orchestrating PDF rasterization, spatial OCR extraction, IDR structuring, and job lifecycle state transitions.
+  - Stateful tracking: `PENDING` -> `PROCESSING` (`INITIALIZING`, `RASTERIZING_PAGES`, `EXTRACTING_STRUCTURED_DATA`, `PERSISTING_IDR`) -> `COMPLETED` / `RETRYING` / `FAILED`.
+  - Transactional retry mechanism with exponential backoff support (`attempts` vs `max_attempts` tracking).
+  - Background worker dispatch capability (`execute_background_processing`).
+  - Immutable audit logging for `DOCUMENT_PROCESSING_STARTED`, `DOCUMENT_PROCESSED`, and `DOCUMENT_PROCESSING_FAILED`.
+- **Database Model & Migrations (`backend/src/infrastructure/models.py`)**:
+  - `ProcessingJob` model with tenant and document foreign keys, cascade deletion, status, step progression, attempt counter, error message, and JSON execution metrics.
+  - Multi-tenant composite indexes: `idx_proc_job_org_status` and `idx_proc_job_doc_status`.
+- **High-Fidelity PDF Rasterization & Image Processing Service (`backend/src/services/image_processor.py`)**:
+  - Vector PDF rendering via Google Chrome's PDFium engine (`pypdfium2`) generating crisp 150-300 DPI viewports.
+  - Dual output generation: high-resolution viewport PNGs (`page_{num}.png`) and aspect-ratio constrained navigation thumbnails (`thumb_{num}.png`, max 320px).
+  - Decompression bomb protection: 10,000 px dimension limits and 100 Megapixel safety boundary.
+  - Image preprocessing for OCR: grayscale normalization, auto-contrast enhancement, and unsharp masking.
+- **Multimodal Text Extraction & Spatial Coordinate Bounding Boxes (`backend/src/ai/extractor.py`)**:
+  - Dual extraction engine: high-precision vector text extraction via `pypdfium2` with exact spatial bounding boxes, falling back to `pypdf`.
+  - True spatial coordinate calculation mapping PDF vector space to rendered raster pixel coordinates (`BoundingBox(x, y, width, height)`).
+  - Domain-specific entity parsing with bound locations:
+    - Title block metadata: `DWG NO`, `REV`, `TITLE`, `DRAWN BY`, `APPROVED BY`, `DATE`, `COMPANY`.
+    - Wire callouts: wire ID (`W101`), gauge (`18 AWG`, `0.75 mm²`), color codes (`RED`, `BLK`, `WHT/BLU`, `GRN/YEL`), from/to connector hints.
+    - Connectors & Terminal Blocks: `J1`, `P2`, `TB1`, `TB2`, `TERM1`, `CON1` with part number extraction.
+    - Numbered engineering general notes parsing.
+- **Document Processing REST API Endpoints (`backend/src/api/routers/documents.py`)**:
+  - `POST /api/v1/documents/{id}/process`: Triggers ingestion pipeline with synchronous or background execution modes (`async_mode` flag).
+  - `GET /api/v1/documents/{id}/processing-jobs`: Returns historical processing runs and attempts.
+  - `GET /api/v1/documents/{id}/processing-jobs/{job_id}`: Returns real-time step and percent completion.
+  - `POST /api/v1/documents/{id}/processing-jobs/{job_id}/retry`: Manually re-attempts failed or stalled jobs.
+  - `GET /api/v1/documents/{id}/extracted`: Retrieves structured Intermediate Document Representation (IDR).
+  - `GET /api/v1/documents/{id}/pages/{page_number}/image`: Generates presigned URLs for rendered page viewports.
+  - `GET /api/v1/documents/{id}/pages/{page_number}/raw-image`: Direct binary streaming of rasterized PNG page.
+  - `GET /api/v1/documents/{id}/pages/{page_number}/raw-thumbnail`: Direct binary streaming of page thumbnail PNG.
+- **Frontend SaaS Ingestion & Viewer Enhancements**:
+  - Extended API client (`frontend/src/lib/api.ts`) with typed methods for processing triggers, status polling, IDR retrieval, and raw image streaming.
+  - Added TypeScript definitions in `frontend/src/types/index.ts` for `ProcessingJob`, `TitleBlock`, `WireCallout`, `Connector`, `GeneralNote`, `DocumentPage`, and `IntermediateDocumentModel`.
+  - Connected `UploadView.tsx` directly into the document processing pipeline on upload completion.
+- **Test Suite Expansion**:
+  - Created unit tests in `tests/unit/test_document_processing.py` covering PDF rasterization, decompression defense, spatial bounding boxes, and 50MB file size limits.
+  - Created integration tests in `tests/integration/test_document_processing_api.py` validating full processing lifecycle, IDR retrieval, raw image streaming, job retry, and cross-tenant IDOR isolation.
+  - Test suite expanded from 44 to **50 tests passing (100%)**.
+
+---
+
 ## [Phase 3: Projects + Document Upload] — 2026-09-25
 
 ### Added

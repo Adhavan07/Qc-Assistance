@@ -4,7 +4,18 @@
  * Includes graceful fallback to realistic engineering mock data when backend is unreachable.
  */
 
-import { AuthTokens, DocumentItem, Organization, Project, QCFinding, QCRun, User } from "../types";
+import {
+  AuthTokens,
+  DocumentItem,
+  IntermediateDocumentModel,
+  Organization,
+  PageImageInfo,
+  ProcessingJob,
+  Project,
+  QCFinding,
+  QCRun,
+  User,
+} from "../types";
 import {
   MOCK_FINDINGS,
   MOCK_ORGANIZATION,
@@ -367,4 +378,82 @@ export const qcApi = {
       { success: true, finding_id: findingId, status }
     );
   },
+
+  // --- Phase 4: Document Processing & Spatial IDR Extraction ---
+
+  async triggerDocumentProcessing(
+    documentId: string,
+    asyncMode: boolean = false,
+    forceReprocess: boolean = false,
+    token?: string | null
+  ): Promise<ProcessingJob> {
+    return request<ProcessingJob>(
+      `/documents/${documentId}/process`,
+      {
+        method: "POST",
+        body: JSON.stringify({ async_mode: asyncMode, force_reprocess: forceReprocess }),
+        token,
+      }
+    );
+  },
+
+  async listProcessingJobs(documentId: string, token?: string | null): Promise<ProcessingJob[]> {
+    return request<ProcessingJob[]>(
+      `/documents/${documentId}/processing-jobs`,
+      { method: "GET", token },
+      []
+    );
+  },
+
+  async getProcessingJob(
+    documentId: string,
+    jobId: string,
+    token?: string | null
+  ): Promise<ProcessingJob> {
+    return request<ProcessingJob>(
+      `/documents/${documentId}/processing-jobs/${jobId}`,
+      { method: "GET", token }
+    );
+  },
+
+  async retryProcessingJob(
+    documentId: string,
+    jobId: string,
+    token?: string | null
+  ): Promise<ProcessingJob> {
+    return request<ProcessingJob>(
+      `/documents/${documentId}/processing-jobs/${jobId}/retry`,
+      { method: "POST", token }
+    );
+  },
+
+  async getExtractedIDR(
+    documentId: string,
+    token?: string | null
+  ): Promise<IntermediateDocumentModel> {
+    return request<IntermediateDocumentModel>(
+      `/documents/${documentId}/extracted`,
+      { method: "GET", token }
+    );
+  },
+
+  async getPageImageInfo(
+    documentId: string,
+    pageNumber: number = 1,
+    token?: string | null
+  ): Promise<PageImageInfo> {
+    return request<PageImageInfo>(
+      `/documents/${documentId}/pages/${pageNumber}/image`,
+      { method: "GET", token }
+    );
+  },
+
+  getRawPageImageUrl(documentId: string, pageNumber: number = 1): string {
+    return `${API_BASE}/documents/${documentId}/pages/${pageNumber}/raw-image`;
+  },
+
+  getRawThumbnailUrl(documentId: string, pageNumber: number = 1): string {
+    return `${API_BASE}/documents/${documentId}/pages/${pageNumber}/raw-thumbnail`;
+  },
 };
+

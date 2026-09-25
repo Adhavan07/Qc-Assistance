@@ -155,18 +155,28 @@ export default function UploadView({ onInspectionReady }: UploadViewProps) {
         allowDuplicate
       );
 
-      // Advance through pipeline visual stages
-      for (let i = 1; i < stages.length; i++) {
+      // Stage 1: Trigger High-Fidelity Rasterization & Spatial OCR Extraction
+      setProcessingStage(1);
+      if (uploadedDoc && uploadedDoc.id) {
+        try {
+          await qcApi.triggerDocumentProcessing(uploadedDoc.id, false, false, token);
+        } catch (procErr) {
+          console.warn("Document processing pipeline warning:", procErr);
+        }
+      }
+
+      // Advance through remaining stages
+      for (let i = 2; i < stages.length; i++) {
         setProcessingStage(i);
-        await new Promise((resolve) => setTimeout(resolve, 750));
+        await new Promise((resolve) => setTimeout(resolve, 600));
       }
 
       deductCredit();
 
       setTimeout(() => {
         setIsProcessing(false);
-        onInspectionReady(uploadedDoc.id || "run-spandsons-demo-01");
-      }, 500);
+        onInspectionReady(uploadedDoc?.id || "run-spandsons-demo-01");
+      }, 400);
     } catch (err: unknown) {
       setIsProcessing(false);
       const msg = (err as Error).message || "Upload failed";

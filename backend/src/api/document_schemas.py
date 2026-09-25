@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-from ..ai.schemas import BoundingBox, ConfidenceLevelEnum, SeverityEnum
+from ..ai.schemas import BoundingBox, ConfidenceLevelEnum, DocumentPage, SeverityEnum
 
 
 class ProjectCreate(BaseModel):
@@ -115,3 +115,43 @@ class QCRunResponse(BaseModel):
     processing_time_ms: int
     created_at: datetime
     completed_at: Optional[datetime] = None
+
+
+class ProcessDocumentRequest(BaseModel):
+    async_mode: bool = False
+    force_reprocess: bool = False
+
+
+class ProcessingJobResponse(BaseModel):
+    id: str
+    organization_id: str
+    document_id: str
+    job_type: str
+    status: str
+    current_step: str
+    progress_percent: int
+    attempts: int
+    max_attempts: int
+    error_message: Optional[str] = None
+    result_metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class DocumentExtractedResponse(BaseModel):
+    document_id: str
+    filename: str
+    page_count: int
+    pages: List[DocumentPage]
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PageImageResponse(BaseModel):
+    document_id: str
+    page_number: int
+    image_url: str
+    thumbnail_url: str
+    width: int
+    height: int
+

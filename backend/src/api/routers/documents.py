@@ -4,22 +4,31 @@ Handles project lifecycle, presigned upload URLs, direct multipart ingestion,
 SHA-256 deduplication, file retrieval, and tenant-scoped deletion.
 """
 
+import asyncio
+import json
 import os
 from typing import List, Optional
 import uuid
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...infrastructure.models import AuditLog, Document, Organization, Project, User
+from ...ai.schemas import IntermediateDocumentModel
+from ...infrastructure.database import AsyncSessionLocal
+from ...infrastructure.models import AuditLog, Document, Organization, ProcessingJob, Project, User
 from ...infrastructure.storage import StorageServiceInterface, compute_sha256, count_pdf_pages
+from ...services.document_processor import DocumentProcessor, execute_background_processing
 from ..auth_schemas import MessageResponse, UserRole
 from ..deps import get_db, get_storage
 from ..deps_auth import get_current_user, require_role
 from ..document_schemas import (
     ConfirmUploadRequest,
     DocumentDownloadResponse,
+    DocumentExtractedResponse,
     DocumentResponse,
+    PageImageResponse,
+    ProcessDocumentRequest,
+    ProcessingJobResponse,
     ProjectCreate,
     ProjectResponse,
     ProjectUpdate,
@@ -619,4 +628,402 @@ async def delete_document(
     return MessageResponse(
         message=f"Document '{doc_name}' was successfully deleted",
     )
+
+
+# --- Phase 4: Document Processing & Extraction Endpoints ---
+
+@router.post(
+    "/documents/{document_id}/process",
+    response_model=ProcessingJobResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def process_document(
+    document_id: str,
+    payload: ProcessDocumentRequest = ProcessDocumentRequest(),
+    current_user: User = Depends(require_role(UserRole.ENGINEER)),
+    db: AsyncSession = Depends(get_db),
+    storage: StorageServiceInterface = Depends(get_storage),
+):
+    """
+    Trigger Document Processing Pipeline:
+    - High-fidelity PDF page rasterization (PNG viewports + thumbnails)
+    - Multimodal text extraction with spatial coordinate bounding boxes
+    - Title block metadata indexing
+    - Wire callouts, connectors, and terminal blocks recognition
+    - Structured Intermediate Document Representation (IDR) persistence
+    """
+    # Verify document tenant ownership
+    doc_stmt = (
+        select(Document)
+        .where(Document.id == document_id)
+        .where(Document.organization_id == current_user.organization_id)
+    )
+    doc = (await db.execute(doc_stmt)).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in your organization",
+        )
+
+    processor = DocumentProcessor(db=db, storage=storage)
+
+    if payload.async_mode:
+        job = await processor.get_or_create_job(
+            document_id=doc.id,
+            organization_id=current_user.organization_id,
+        )
+        asyncio.create_task(
+            execute_background_processing(
+                document_id=doc.id,
+                organization_id=current_user.organization_id,
+                job_id=job.id,
+                session_factory=AsyncSessionLocal,
+                storage=storage,
+            )
+        )
+        return ProcessingJobResponse(
+            id=job.id,
+            organization_id=job.organization_id,
+            document_id=job.document_id,
+            job_type=job.job_type,
+            status=job.status,
+            current_step=job.current_step,
+            progress_percent=job.progress_percent,
+            attempts=job.attempts,
+            max_attempts=job.max_attempts,
+            error_message=job.error_message,
+            result_metadata=job.result_metadata,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+        )
+
+    # Synchronous processing path
+    try:
+        job = await processor.process_document(
+            document_id=doc.id,
+            organization_id=current_user.organization_id,
+            force_reprocess=payload.force_reprocess,
+        )
+        return ProcessingJobResponse(
+            id=job.id,
+            organization_id=job.organization_id,
+            document_id=job.document_id,
+            job_type=job.job_type,
+            status=job.status,
+            current_step=job.current_step,
+            progress_percent=job.progress_percent,
+            attempts=job.attempts,
+            max_attempts=job.max_attempts,
+            error_message=job.error_message,
+            result_metadata=job.result_metadata,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Document processing failed: {str(exc)}",
+        )
+
+
+@router.get(
+    "/documents/{document_id}/processing-jobs",
+    response_model=List[ProcessingJobResponse],
+)
+async def list_processing_jobs(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all processing jobs for a document, ordered chronologically."""
+    # Verify tenant ownership
+    doc_stmt = (
+        select(Document)
+        .where(Document.id == document_id)
+        .where(Document.organization_id == current_user.organization_id)
+    )
+    doc = (await db.execute(doc_stmt)).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in your organization",
+        )
+
+    stmt = (
+        select(ProcessingJob)
+        .where(ProcessingJob.document_id == document_id)
+        .where(ProcessingJob.organization_id == current_user.organization_id)
+        .order_by(ProcessingJob.created_at.desc())
+    )
+    jobs = (await db.execute(stmt)).scalars().all()
+
+    return [
+        ProcessingJobResponse(
+            id=j.id,
+            organization_id=j.organization_id,
+            document_id=j.document_id,
+            job_type=j.job_type,
+            status=j.status,
+            current_step=j.current_step,
+            progress_percent=j.progress_percent,
+            attempts=j.attempts,
+            max_attempts=j.max_attempts,
+            error_message=j.error_message,
+            result_metadata=j.result_metadata,
+            created_at=j.created_at,
+            started_at=j.started_at,
+            completed_at=j.completed_at,
+        )
+        for j in jobs
+    ]
+
+
+@router.get(
+    "/documents/{document_id}/processing-jobs/{job_id}",
+    response_model=ProcessingJobResponse,
+)
+async def get_processing_job(
+    document_id: str,
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve status, current progress step, and metadata of a processing job."""
+    stmt = (
+        select(ProcessingJob)
+        .where(ProcessingJob.id == job_id)
+        .where(ProcessingJob.document_id == document_id)
+        .where(ProcessingJob.organization_id == current_user.organization_id)
+    )
+    job = (await db.execute(stmt)).scalar_one_or_none()
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processing job not found in your organization",
+        )
+
+    return ProcessingJobResponse(
+        id=job.id,
+        organization_id=job.organization_id,
+        document_id=job.document_id,
+        job_type=job.job_type,
+        status=job.status,
+        current_step=job.current_step,
+        progress_percent=job.progress_percent,
+        attempts=job.attempts,
+        max_attempts=job.max_attempts,
+        error_message=job.error_message,
+        result_metadata=job.result_metadata,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+@router.post(
+    "/documents/{document_id}/processing-jobs/{job_id}/retry",
+    response_model=ProcessingJobResponse,
+)
+async def retry_processing_job(
+    document_id: str,
+    job_id: str,
+    current_user: User = Depends(require_role(UserRole.ENGINEER)),
+    db: AsyncSession = Depends(get_db),
+    storage: StorageServiceInterface = Depends(get_storage),
+):
+    """Manually trigger retry of a failed or stalled processing job."""
+    processor = DocumentProcessor(db=db, storage=storage)
+    try:
+        job = await processor.retry_job(
+            job_id=job_id,
+            organization_id=current_user.organization_id,
+        )
+        return ProcessingJobResponse(
+            id=job.id,
+            organization_id=job.organization_id,
+            document_id=job.document_id,
+            job_type=job.job_type,
+            status=job.status,
+            current_step=job.current_step,
+            progress_percent=job.progress_percent,
+            attempts=job.attempts,
+            max_attempts=job.max_attempts,
+            error_message=job.error_message,
+            result_metadata=job.result_metadata,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
+@router.get(
+    "/documents/{document_id}/extracted",
+    response_model=DocumentExtractedResponse,
+)
+async def get_extracted_document(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    storage: StorageServiceInterface = Depends(get_storage),
+):
+    """
+    Retrieve structured Intermediate Document Representation (IDR).
+    Contains parsed pages, title blocks, wire callouts, connectors, and notes with bounding boxes.
+    """
+    doc_stmt = (
+        select(Document)
+        .where(Document.id == document_id)
+        .where(Document.organization_id == current_user.organization_id)
+    )
+    doc = (await db.execute(doc_stmt)).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in your organization",
+        )
+
+    if doc.status not in ("PROCESSED", "COMPLETED"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Document is in status '{doc.status}' and has not been processed yet. "
+                f"Call POST /api/v1/documents/{document_id}/process to execute processing."
+            ),
+        )
+
+    idr_path = f"tenants/{current_user.organization_id}/documents/{document_id}/extracted/idr.json"
+    if not storage.file_exists(idr_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Extracted IDR data not found in storage. Re-run document processing.",
+        )
+
+    idr_bytes = storage.read_file(idr_path)
+    idr_data = json.loads(idr_bytes.decode("utf-8"))
+    idr = IntermediateDocumentModel.model_validate(idr_data)
+
+    return DocumentExtractedResponse(
+        document_id=idr.document_id,
+        filename=idr.filename,
+        page_count=idr.page_count,
+        pages=idr.pages,
+        metadata=idr.metadata,
+    )
+
+
+@router.get(
+    "/documents/{document_id}/pages/{page_number}/image",
+    response_model=PageImageResponse,
+)
+async def get_page_image_info(
+    document_id: str,
+    page_number: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    storage: StorageServiceInterface = Depends(get_storage),
+):
+    """Retrieve image and thumbnail presigned URLs for a rasterized drawing page."""
+    doc_stmt = (
+        select(Document)
+        .where(Document.id == document_id)
+        .where(Document.organization_id == current_user.organization_id)
+    )
+    doc = (await db.execute(doc_stmt)).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in your organization",
+        )
+
+    img_path = f"tenants/{current_user.organization_id}/documents/{document_id}/pages/page_{page_number}.png"
+    thumb_path = f"tenants/{current_user.organization_id}/documents/{document_id}/pages/thumb_{page_number}.png"
+
+    if not storage.file_exists(img_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Page {page_number} image not found. Ensure document has been processed.",
+        )
+
+    img_url = storage.generate_download_url(img_path, expire_seconds=900)
+    thumb_url = storage.generate_download_url(thumb_path, expire_seconds=900)
+
+    return PageImageResponse(
+        document_id=document_id,
+        page_number=page_number,
+        image_url=img_url,
+        thumbnail_url=thumb_url,
+        width=1200,
+        height=850,
+    )
+
+
+@router.get("/documents/{document_id}/pages/{page_number}/raw-image")
+async def get_raw_page_image(
+    document_id: str,
+    page_number: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    storage: StorageServiceInterface = Depends(get_storage),
+):
+    """Stream raw PNG image bytes for direct browser viewport rendering."""
+    doc_stmt = (
+        select(Document)
+        .where(Document.id == document_id)
+        .where(Document.organization_id == current_user.organization_id)
+    )
+    doc = (await db.execute(doc_stmt)).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in your organization",
+        )
+
+    img_path = f"tenants/{current_user.organization_id}/documents/{document_id}/pages/page_{page_number}.png"
+    if not storage.file_exists(img_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Page {page_number} image not found. Ensure document has been processed.",
+        )
+
+    img_bytes = storage.read_file(img_path)
+    return Response(content=img_bytes, media_type="image/png")
+
+
+@router.get("/documents/{document_id}/pages/{page_number}/raw-thumbnail")
+async def get_raw_page_thumbnail(
+    document_id: str,
+    page_number: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    storage: StorageServiceInterface = Depends(get_storage),
+):
+    """Stream thumbnail PNG bytes for navigation sidebars."""
+    doc_stmt = (
+        select(Document)
+        .where(Document.id == document_id)
+        .where(Document.organization_id == current_user.organization_id)
+    )
+    doc = (await db.execute(doc_stmt)).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in your organization",
+        )
+
+    thumb_path = f"tenants/{current_user.organization_id}/documents/{document_id}/pages/thumb_{page_number}.png"
+    if not storage.file_exists(thumb_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Page {page_number} thumbnail not found. Ensure document has been processed.",
+        )
+
+    thumb_bytes = storage.read_file(thumb_path)
+    return Response(content=thumb_bytes, media_type="image/png")
+
 
