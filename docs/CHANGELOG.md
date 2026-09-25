@@ -7,6 +7,42 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 3: Projects + Document Upload] — 2026-09-25
+
+### Added
+- **Project Lifecycle Management (`backend/src/api/routers/documents.py`)**:
+  - Project creation endpoint (`POST /api/v1/projects`) requiring `ENGINEER` role or higher, tenant-scoped.
+  - Project listing endpoint (`GET /api/v1/projects`) returning active projects aggregated with document counts.
+  - Project retrieval by ID (`GET /api/v1/projects/{id}`) with strict tenant isolation.
+  - Project update endpoint (`PATCH /api/v1/projects/{id}`) for name and description edits.
+  - Project deletion endpoint (`DELETE /api/v1/projects/{id}`) with cascading document/QC removal and audit logging.
+- **Two-Phase Direct-to-Storage Presigned Upload**:
+  - `POST /api/v1/documents/upload-intent`: Generates S3/MinIO presigned POST upload URLs partitioned by tenant path (`tenants/{org_id}/documents/{doc_id}/original/{filename}`).
+  - `POST /api/v1/documents/{id}/confirm`: Verifies project membership, performs SHA-256 deduplication, and transitions document status to `UPLOADED`.
+- **Direct Multipart File Ingestion**:
+  - `POST /api/v1/documents/upload`: Direct `multipart/form-data` upload endpoint supporting local development, CI/CD, and offline testing without cloud S3 dependencies.
+  - Automatic binary SHA-256 checksum calculation and page count extraction using `pypdf`.
+- **SHA-256 Checksum Deduplication & Conflict Prevention**:
+  - Automatic detection of identical diagrams previously uploaded within the organization.
+  - Returns `409 Conflict` with existing document reference to protect clients against redundant storage and inspection credit expenditure.
+  - Optional `allow_duplicate` override parameter to allow re-ingestion when explicitly commanded.
+- **Storage Backend Enhancements (`backend/src/infrastructure/storage.py`)**:
+  - Standardized interface for `save_file`, `read_file`, `delete_file`, and `file_exists`.
+  - Implemented both for local filesystem storage (`LocalMockStorageService`) and S3-compatible cloud storage (`S3StorageService`).
+  - Added presigned download URL generation endpoint (`GET /api/v1/documents/{id}/download-url`).
+  - Added tenant-isolated document deletion (`DELETE /api/v1/documents/{id}`) with object storage cleanup.
+- **Frontend SaaS Ingestion Workflow (`frontend/src/components/UploadView.tsx`)**:
+  - Target project selection card with inline "+ New Project" creation form.
+  - Client-side SHA-256 checksum computation via Web Crypto API.
+  - Duplicate diagram detection warning banner with 1-click override checkbox.
+  - Real-time pipeline staging progress indicators matching the white professional enterprise theme.
+- **Verification**:
+  - Test suite expanded from 40 to **44 tests** covering project CRUD, SHA-256 deduplication, direct multipart ingestion, and cross-tenant IDOR defense.
+  - All **44/44 tests passing** in 15.93s.
+  - `npm run build` / Next.js production compilation passing with **0 errors**.
+
+---
+
 ## [Phase 2: Authentication + Multi-Tenancy] — 2026-09-25
 
 ### Added

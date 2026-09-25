@@ -14,12 +14,18 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = None
 
 
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=255)
+    description: Optional[str] = None
+
+
 class ProjectResponse(BaseModel):
     id: str
     organization_id: str
     name: str
     description: Optional[str] = None
     created_at: datetime
+    document_count: Optional[int] = 0
 
 
 class UploadIntentRequest(BaseModel):
@@ -45,6 +51,7 @@ class ConfirmUploadRequest(BaseModel):
     mime_type: str
     sha256_checksum: str
     page_count: int = 1
+    allow_duplicate: bool = False
 
 
 class DocumentResponse(BaseModel):
@@ -58,6 +65,16 @@ class DocumentResponse(BaseModel):
     page_count: int
     status: str
     created_at: datetime
+    is_duplicate: Optional[bool] = False
+    existing_document_id: Optional[str] = None
+
+
+class DocumentDownloadResponse(BaseModel):
+    document_id: str
+    filename: str
+    download_url: str
+    expires_in_seconds: int
+
 
 
 class CreateQCRunRequest(BaseModel):

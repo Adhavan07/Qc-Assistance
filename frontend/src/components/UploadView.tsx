@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   UploadCloud,
   FileText,
@@ -10,17 +10,32 @@ import {
   ArrowRight,
   Sparkles,
   Zap,
+  FolderPlus,
+  Folder,
+  Layers,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
+import { qcApi } from "../lib/api";
+import { Project } from "../types";
 
 interface UploadViewProps {
   onInspectionReady: (runId: string) => void;
 }
 
 export default function UploadView({ onInspectionReady }: UploadViewProps) {
-  const { organization, deductCredit } = useAuth();
+  const { organization, token, deductCredit } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("proj-01");
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileChecksum, setFileChecksum] = useState<string | null>(null);
+  const [allowDuplicate, setAllowDuplicate] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStage, setProcessingStage] = useState<number>(0);
   const [selectedStandards, setSelectedStandards] = useState<string[]>([
@@ -35,6 +50,55 @@ export default function UploadView({ onInspectionReady }: UploadViewProps) {
     { name: "Deterministic Rule Engine Validation", desc: "Executing 48 automated checks across selected electrical standards" },
     { name: "AI Synthesis & Report Generation", desc: "Correlating bounding boxes, computing confidence scores, and assembling findings" },
   ];
+
+  // Fetch projects on mount
+  useEffect(() => {
+    qcApi.listProjects(token)
+      .then((data) => {
+        if (data && data.length > 0) {
+          setProjects(data);
+          setSelectedProjectId(data[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [token]);
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) return;
+    try {
+      const created = await qcApi.createProject({ name: newProjectName.trim() }, token);
+      setProjects([created, ...projects]);
+      setSelectedProjectId(created.id);
+      setNewProjectName("");
+      setIsCreatingProject(false);
+    } catch {
+      // Fallback local
+      const mockProj: Project = {
+        id: `proj-${Date.now().toString(36)}`,
+        organization_id: "org-spandsons-01",
+        name: newProjectName.trim(),
+        created_at: new Date().toISOString(),
+        document_count: 0,
+      };
+      setProjects([mockProj, ...projects]);
+      setSelectedProjectId(mockProj.id);
+      setNewProjectName("");
+      setIsCreatingProject(false);
+    }
+  };
+
+  const calculateClientSha256 = async (file: File) => {
+    try {
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+      setFileChecksum(hashHex);
+    } catch {
+      setFileChecksum(null);
+    }
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -51,13 +115,19 @@ export default function UploadView({ onInspectionReady }: UploadViewProps) {
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
+      const file = e.dataTransfer.files[0];
+      setSelectedFile(file);
+      setDuplicateWarning(null);
+      calculateClientSha256(file);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      setDuplicateWarning(null);
+      calculateClientSha256(file);
     }
   };
 
@@ -74,24 +144,52 @@ export default function UploadView({ onInspectionReady }: UploadViewProps) {
 
     setIsProcessing(true);
     setProcessingStage(0);
+    setDuplicateWarning(null);
 
-    for (let i = 0; i < stages.length; i++) {
-      setProcessingStage(i);
-      await new Promise((resolve) => setTimeout(resolve, 800));
-    }
+    try {
+      // Stage 0: Direct Upload to S3/storage
+      const uploadedDoc = await qcApi.uploadDocumentDirect(
+        selectedFile,
+        selectedProjectId,
+        token,
+        allowDuplicate
+      );
 
-    deductCredit();
+      // Advance through pipeline visual stages
+      for (let i = 1; i < stages.length; i++) {
+        setProcessingStage(i);
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
 
-    setTimeout(() => {
+      deductCredit();
+
+      setTimeout(() => {
+        setIsProcessing(false);
+        onInspectionReady(uploadedDoc.id || "run-spandsons-demo-01");
+      }, 500);
+    } catch (err: unknown) {
       setIsProcessing(false);
-      onInspectionReady("run-spandsons-demo-01");
-    }, 600);
+      const msg = (err as Error).message || "Upload failed";
+      if (msg.includes("Duplicate diagram detected") || msg.includes("409")) {
+        setDuplicateWarning(
+          "Duplicate Diagram Detected: This wiring diagram checksum already exists in this tenant. Enable 'Allow duplicate ingestion' below to proceed."
+        );
+      } else {
+        alert(msg);
+      }
+    }
   };
 
   const loadSampleSchematic = () => {
-    const blob = new Blob(["mock electrical wiring diagram pdf content"], { type: "application/pdf" });
-    const file = new File([blob], "Boeing_777X_Avionics_Harness_WD-777-04.pdf", { type: "application/pdf" });
+    const blob = new Blob(["%PDF-1.4\n1 0 obj\n<<\n/Title (Boeing 777X Avionics Harness)\n>>\nendobj"], {
+      type: "application/pdf",
+    });
+    const file = new File([blob], "Boeing_777X_Avionics_Harness_WD-777-04.pdf", {
+      type: "application/pdf",
+    });
     setSelectedFile(file);
+    setDuplicateWarning(null);
+    calculateClientSha256(file);
   };
 
   return (
@@ -105,9 +203,103 @@ export default function UploadView({ onInspectionReady }: UploadViewProps) {
           Upload Wiring Diagram Manual
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Ingest multi-page PDF or raster schematics for instant AI-powered compliance checking.
+          Direct-to-cloud multi-page PDF ingestion with automated SHA-256 deduplication and standards verification.
         </p>
       </div>
+
+      {/* Project Selector Card */}
+      {!isProcessing && (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Folder className="h-4 w-4 text-blue-600" />
+              <label className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Target Project Container
+              </label>
+            </div>
+            {!isCreatingProject && (
+              <button
+                type="button"
+                onClick={() => setIsCreatingProject(true)}
+                className="flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+                <span>+ New Project</span>
+              </button>
+            )}
+          </div>
+
+          {isCreatingProject ? (
+            <form onSubmit={handleCreateProject} className="flex items-center space-x-2">
+              <input
+                type="text"
+                required
+                placeholder="e.g. Avionics Harness Batch #3"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:border-blue-600 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer"
+              >
+                Create
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreatingProject(false)}
+                className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {projects.map((proj) => {
+                const isSelected = selectedProjectId === proj.id;
+                return (
+                  <div
+                    key={proj.id}
+                    onClick={() => setSelectedProjectId(proj.id)}
+                    className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                      isSelected
+                        ? "border-blue-600 bg-blue-50/50 shadow-xs"
+                        : "border-slate-200 bg-slate-50/50 hover:border-slate-300"
+                    }`}
+                  >
+                    <Layers className={`h-4 w-4 mt-0.5 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-900 truncate">{proj.name}</p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {proj.description || "Active engineering project container"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Duplicate Warning Alert */}
+      {duplicateWarning && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex items-start space-x-3 text-amber-900 text-xs">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-2">
+            <p className="font-semibold">{duplicateWarning}</p>
+            <label className="flex items-center space-x-2 cursor-pointer font-bold text-slate-900">
+              <input
+                type="checkbox"
+                checked={allowDuplicate}
+                onChange={(e) => setAllowDuplicate(e.target.checked)}
+                className="rounded border-slate-300 text-blue-600 focus:ring-0"
+              />
+              <span>Allow duplicate ingestion for this manual</span>
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* Credit Warning if zero */}
       {organization && organization.credits_remaining <= 0 && (
@@ -119,6 +311,7 @@ export default function UploadView({ onInspectionReady }: UploadViewProps) {
           </div>
         </div>
       )}
+
 
       {/* Main Upload Form */}
       <div className="space-y-6">

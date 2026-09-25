@@ -94,3 +94,27 @@ export interface AuthTokens {
   organization?: Organization;
 }
 
+export interface Project {
+  id: string;
+  organization_id: string;
+  name: string;
+  description?: string | null;
+  created_at: string;
+  document_count?: number;
+}
+
+export interface DocumentItem {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  filename: string;
+  file_size_bytes: number;
+  mime_type: string;
+  sha256_checksum: string;
+  page_count: number;
+  status: string;
+  created_at: string;
+  is_duplicate?: boolean;
+}
+
+
