@@ -7,6 +7,39 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 1: Project Foundation & Containerized Monorepo] — 2026-09-25
+
+### Added
+- **Multi-Service Containerization (`docker-compose.yml`)**:
+  - Full local development stack orchestrating all 7 services:
+    - `web`: Next.js 16 frontend on port 3000
+    - `api`: FastAPI REST API on port 8000 with healthcheck probes
+    - `worker`: Background QC worker processing asynchronous task queues
+    - `postgres`: PostgreSQL 16 on port 5432 with healthchecks
+    - `redis`: Redis 7 on port 6379 for task queueing and SSE pub/sub
+    - `minio`: MinIO S3-compatible object storage on ports 9000 & 9001
+    - `mailpit`: Mailpit local SMTP & webmail testing on ports 1025 & 8025
+- **Production & Development Dockerfiles**:
+  - `backend/Dockerfile`: Multi-stage build, unprivileged `appuser` (UID 1001), pinned dependencies, healthcheck probe.
+  - `backend/Dockerfile.dev`: Live reloading uvicorn development container.
+  - `frontend/Dockerfile`: Multi-stage build, unprivileged `nextjs` user (UID 1001), standalone Next.js production runner.
+  - `frontend/Dockerfile.dev`: Next.js Turbopack development container.
+- **Developer Experience & Tooling**:
+  - Root `Makefile`: Targets for `setup`, `dev`, `dev-docker`, `test`, `lint`, `format`, `build`, `migrate`, `seed`, and `clean`.
+  - `.env.example`: Centralized template documenting all environment variables across backend, frontend, database, redis, S3, and AI models.
+  - `.pre-commit-config.yaml`: Pre-commit hooks for trailing whitespace, YAML/JSON validation, private key detection, and Ruff formatting.
+  - `.github/workflows/ci.yml`: GitHub Actions automated CI pipeline executing pytest with code coverage and Next.js production builds.
+- **Database Seeding (`backend/src/infrastructure/seed.py`)**:
+  - Idempotent database seeder provisioning demo organization (`Spandsons Horizon Engineering Pvt. Ltd.`), initial users (`pravin@spandsons.com`, `gogulnath@spandsons.com`, `inspector@spandsons.com`), and initial project (`Commercial Avionics Harness WD-777`).
+- **Dependencies**:
+  - Added `asyncpg>=0.29.0` and `redis>=5.0.0` to `backend/requirements.txt` for PostgreSQL and Redis support.
+- **Verification**:
+  - `make test`: All **35/35 tests passing**.
+  - `make build`: Next.js production build succeeds with **0 errors**.
+  - Database seeder tested and verified idempotent.
+
+---
+
 ## [Phase 6: Frontend SaaS Application (MVP-1)] — 2026-09-25
 
 ### Added
