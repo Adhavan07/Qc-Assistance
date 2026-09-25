@@ -7,6 +7,52 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 6: QC Rule Engine] — 2026-09-25
+
+### Added
+- **Deterministic QC Rules Engine Across 6 Mandatory Categories (`backend/src/ai/rules.py`)**:
+  - `BaseRule`: Abstract base class enforcing metadata integrity (`rule_id`, `name`, `category`, `severity`, `version`, `enabled`, `standard`, `standard_section`, `applicability`, `expected_condition`, `remediation_guidance`).
+  - **Category: Wire (`wire`)**:
+    - `MissingWireGaugeRule` (`RULE-WG-001`, IPC-WHMA-A-620D §4.1): Validates explicit wire gauge declarations on all conductors.
+    - `ColorCodeMismatchRule` (`RULE-CC-003`, UL 508A §66.5): Enforces unambiguous standard insulation color codes.
+    - `GroundConductorColorRule` (`RULE-WIRE-GND-001`, UL 508A §15.2 / NFPA 79 §13.2): Validates that protective ground and earth conductors are insulated GREEN or GREEN/YELLOW.
+    - `WireAmpacitySizingRule` (`RULE-WIRE-AMP-001`, UL 508A Table 28.1): Flags undersized conductors vs declared circuit breaker and fuse current ratings.
+  - **Category: Terminal (`terminal`)**:
+    - `TerminalMissingPartNumberRule` (`RULE-TRM-MPN-001`, IPC-WHMA-A-620D §9.1): Validates manufacturer part numbers on all terminal blocks and connectors.
+    - `TerminalBlockDesignationRule` (`RULE-TRM-PIN-001`, IPC-WHMA-A-620D §13.5): Enforces explicit terminal position/pin numbering (e.g. `TB1-1`, `TB1-2`) for multi-conductor connections.
+    - `TerminalOvercrowdingRule` (`RULE-TRM-CRW-001`, UL 508A §28.3.2): Flags terminal screw clamps terminating more than the standard maximum of 2 conductors.
+  - **Category: Component (`component`)**:
+    - `ComponentDesignatorSyntaxRule` (`RULE-CMP-SYN-001`, ANSI/IEEE 315 / IEEE 200 §4): Validates standard class prefix letters (J, P, TB, K, CB, F, SW, R, C, D).
+    - `OvercurrentDeviceRatingRule` (`RULE-CMP-OCP-001`, UL 508A §29.1): Verifies that circuit breakers and fuses declare continuous current ratings.
+  - **Category: Reference (`reference`)**:
+    - `DuplicateDesignatorRule` (`RULE-RD-004`, ANSI/IEEE 200 §4.2): Enforces global uniqueness of component reference designators across multi-sheet schematics.
+    - `DanglingWireReferenceRule` (`RULE-REF-DNG-001`, IPC-WHMA-A-620D §13.4): Identifies un-terminated conductors without destination endpoints or spare/stub markings.
+    - `CrossReferenceEndpointRule` (`RULE-REF-XRF-001`, IPC-WHMA-A-620D §13.4): Flags wire endpoints referencing non-existent connector designators not declared in the drawing BOM.
+  - **Category: Documentation (`documentation`)**:
+    - `TitleBlockIncompleteRule` (`RULE-TB-005`, ISO 7200 / ASME Y14.1 §5): Verifies Drawing Number, Revision, Drawn By, and Date in drawing title blocks.
+    - `DrawingNumberSyntaxRule` (`RULE-DOC-NUM-001`, ISO 7200 §5.1): Rejects unreleased placeholder strings (DRAFT, TBD, XXXX, TEMP, UNASSIGNED).
+    - `RevisionSyntaxRule` (`RULE-DOC-REV-001`, ASME Y14.35M §5.1): Prohibits confusing revision letters (I, O, Q, S, X, Z) per standard engineering practice.
+  - **Category: Consistency (`consistency`)**:
+    - `GeneralNotesContradictionRule` (`RULE-CON-NOT-001`, IPC-WHMA-A-620D §1.5): Flags contradictions between General Drawing Notes (e.g. minimum wire gauge) and wire schedules.
+    - `WireGaugeContactCompatibilityRule` (`RULE-CON-CNT-001`, IPC-WHMA-A-620D §19.5): Detects physical incompatibilities between heavy power conductors (4/0 to 8 AWG) and miniature signal connectors (DB9, SUB-D, RJ45).
+- **Versioned Rule Pack Architecture (`backend/src/ai/rules.py`)**:
+  - `RulePack`: Standard container supporting pack ID, version, description, standard citation, and rule composition.
+  - Implemented 6 versioned packs:
+    - `PACK-CORE-BASELINE-V1.0`: Core benchmark rules for regression stability.
+    - `PACK-IPC-620-V1.0`: IPC-WHMA-A-620D Class 3 Aerospace & High-Reliability Ruleset.
+    - `PACK-UL-508A-V1.0`: UL 508A Industrial Control Panel Standards Ruleset.
+    - `PACK-ISO-7200-V1.0`: ISO 7200 / ASME Y14 Engineering Documentation Ruleset.
+    - `PACK-MIL-STD-681-V1.0`: MIL-STD-681D Aerospace Wire Identification Ruleset.
+    - `PACK-SPANDSONS-V1.0`: Spandsons Horizon Internal Engineering QC Standard Ruleset.
+- **Rule Registry & Engine Integration (`backend/src/ai/rules.py`, `backend/src/ai/engine.py`)**:
+  - `RuleRegistry`: Implements pack registration, category querying, standard querying, rule enable/disable toggling, and multi-pack execution with deduplication.
+  - `QCAnalysisEngine.analyze`: Added `rule_pack_ids` parameter for dynamic rule pack dispatch.
+- **Unit & Regression Verification (`tests/unit/test_rules.py`)**:
+  - Added 16 new test fixtures (21 total in `test_rules.py`) covering all 17 rules, rule packs, toggling, standards mapping, and metadata completeness.
+  - Test suite expanded from 57 to **73 tests passing (100%)**.
+
+---
+
 ## [Phase 5: AI Analysis] — 2026-09-25
 
 ### Added

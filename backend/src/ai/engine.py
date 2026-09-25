@@ -44,6 +44,7 @@ class QCAnalysisEngine:
         file_path: str,
         standards: Optional[List[str]] = None,
         document_id: Optional[str] = None,
+        rule_pack_ids: Optional[List[str]] = None,
     ) -> QCAnalysisResult:
         start_time = time.time()
         applied_standards = standards or ["IPC-WHMA-A-620D", "UL 508A", "ISO 7200"]
@@ -52,7 +53,10 @@ class QCAnalysisEngine:
         idr: IntermediateDocumentModel = self.extractor.extract(file_path, document_id)
 
         # Step 2: Run Deterministic Engineering Rule Evaluators
-        deterministic_findings: List[QCFinding] = self.rules.run_all(idr)
+        deterministic_findings: List[QCFinding] = self.rules.run_all(
+            idr,
+            active_pack_ids=rule_pack_ids,
+        )
 
         # Step 3: Finding Arbitration & Deduplication
         all_findings = self._arbitrate_and_renumber(deterministic_findings)
