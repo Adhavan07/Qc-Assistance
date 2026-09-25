@@ -7,6 +7,47 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 3: Database & Backend Foundation] — 2026-09-25
+
+### Added
+- **Core Configuration (`backend/src/core/config.py`)**:
+  - Pydantic `BaseSettings` for database URL, security secrets, S3 buckets, CORS origins, and runtime environments.
+- **Structured Logging (`backend/src/core/logging.py`)**:
+  - `structlog` pipeline formatting JSON in production and readable color console in development with request ID and latency context.
+- **Async Database Layer (`backend/src/infrastructure/database.py`)**:
+  - SQLAlchemy 2.0 `create_async_engine`, `async_sessionmaker`, `Base` declarative mapping, and FastAPI dependency provider `get_db_session()`.
+- **Relational Data Models (`backend/src/infrastructure/models.py`)**:
+  - Multi-tenant data model implementing:
+    - `Organization`: Root tenant entity with plan tiers (`PAY_PER_CHECK`, `SUBSCRIPTION`), credits, and relations.
+    - `User`: Email, password hash, role (`OWNER`, `ADMIN`, `ENGINEER`, `INSPECTOR`, `VIEWER`), org foreign key.
+    - `Project`: Project grouping scoped to organization.
+    - `Document`: Manual metadata, file size, SHA256 checksum, page count, and status.
+    - `QCRun`: Execution records, status, checks summary, version audit, token usage, and processing latency.
+    - `QCFinding`: Discrepancy details linked to run with bounding box JSON, severity, and standards citation.
+    - `FindingFeedback`: Human inspector review status (`CORRECT`, `INCORRECT`, `NEEDS_REVIEW`).
+    - `AuditLog`: Immutable audit trail for compliance and security events.
+- **Object Storage Service (`backend/src/infrastructure/storage.py`)**:
+  - `S3StorageService`: Boto3 S3 client generating presigned upload/download URLs partitioned by tenant path:
+    `tenants/{org_id}/documents/{doc_id}/original/{filename}`.
+  - `LocalMockStorageService`: Offline fallback for local development and unit tests.
+- **Asynchronous Task Queue Abstraction (`backend/src/infrastructure/queue.py`)**:
+  - `TaskQueueInterface` and `AsyncInMemoryQueue` for decoupled background QC job processing.
+- **FastAPI Application Skeleton (`backend/src/api/main.py` & `backend/src/api/deps.py`)**:
+  - FastAPI application instance with CORS middleware, Request ID injection (`X-Request-ID`), and latency headers (`X-Process-Time-Ms`).
+  - Probes: `GET /health` (liveness), `GET /ready` (readiness with DB check), and `GET /api/v1/info`.
+  - Dependency injection providers in `backend/src/api/deps.py`.
+- **Database Migrations (`backend/alembic/`)**:
+  - Alembic configuration supporting async migrations (`alembic.ini`, `env.py`).
+  - Initial migration `001_initial_schema.py` creating all tables and composite indexes.
+  - Verified reversible migration (`upgrade head` -> `downgrade -1` -> `upgrade head`).
+- **Integration Test Suite (`tests/integration/`)**:
+  - `test_database_models.py`: Validates model creation, foreign key relations, and cascading deletes.
+  - `test_storage.py`: Validates tenant storage path isolation and presigned URL parameters.
+  - `test_api_health.py`: Validates health probes and request ID middleware.
+  - Test result: **24/24 tests passed across all suites**.
+
+---
+
 ## [Phase 2: AI Evaluation Framework & Gold Dataset] — 2026-09-25
 
 ### Added
