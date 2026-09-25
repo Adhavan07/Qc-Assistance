@@ -165,7 +165,7 @@ export const MOCK_QC_RUN: QCRun = {
   prompt_version: "wiring-qc-prompt-v1.0",
   rules_version: "ruleset-ipc620-ul508a-v1.0",
   processing_time_ms: 1840,
-  created_at: new Date(Date.now() - 3600000).toISOString(),
+  created_at: "2026-09-25T14:30:00Z",
   findings: MOCK_FINDINGS,
 };
 
@@ -185,7 +185,7 @@ export const MOCK_RECENT_RUNS: QCRun[] = [
     prompt_version: "wiring-qc-prompt-v1.0",
     rules_version: "ruleset-ipc620-ul508a-v1.0",
     processing_time_ms: 1620,
-    created_at: new Date(Date.now() - 86400000).toISOString(),
+    created_at: "2026-09-24T11:20:00Z",
     findings: [],
   },
   {
@@ -202,7 +202,7 @@ export const MOCK_RECENT_RUNS: QCRun[] = [
     prompt_version: "wiring-qc-prompt-v1.0",
     rules_version: "ruleset-ipc620-ul508a-v1.0",
     processing_time_ms: 2110,
-    created_at: new Date(Date.now() - 172800000).toISOString(),
+    created_at: "2026-09-23T09:45:00Z",
     findings: [MOCK_FINDINGS[2], MOCK_FINDINGS[4]],
   },
   {
@@ -219,7 +219,7 @@ export const MOCK_RECENT_RUNS: QCRun[] = [
     prompt_version: "wiring-qc-prompt-v1.0",
     rules_version: "ruleset-ipc620-ul508a-v1.0",
     processing_time_ms: 1450,
-    created_at: new Date(Date.now() - 259200000).toISOString(),
+    created_at: "2026-09-22T16:10:00Z",
     findings: [],
   },
 ];

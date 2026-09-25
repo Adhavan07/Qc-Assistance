@@ -38,7 +38,7 @@ export default function Sidebar({ activeTab, setActiveTab, openDiscrepanciesCoun
       label: "QC Inspector",
       icon: FileSearch,
       badge: openDiscrepanciesCount > 0 ? `${openDiscrepanciesCount} issues` : null,
-      badgeColor: "bg-red-500/20 text-red-300 border-red-500/30",
+      badgeColor: "bg-red-50 text-red-700 border-red-200",
     },
     {
       id: "standards" as NavTab,
@@ -55,10 +55,10 @@ export default function Sidebar({ activeTab, setActiveTab, openDiscrepanciesCoun
   ];
 
   return (
-    <aside className="w-64 border-r border-white/10 bg-[#080c14]/95 flex flex-col justify-between p-4 shrink-0">
+    <aside className="w-64 border-r border-slate-200 bg-white flex flex-col justify-between p-4 shrink-0">
       <div className="space-y-6">
         <div>
-          <div className="px-3 text-[11px] font-bold tracking-wider text-slate-500 uppercase">
+          <div className="px-3 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
             Platform Navigation
           </div>
           <nav className="mt-3 space-y-1">
@@ -70,24 +70,24 @@ export default function Sidebar({ activeTab, setActiveTab, openDiscrepanciesCoun
                   key={item.id}
                   id={`nav-tab-${item.id}`}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
                     isActive
-                      ? "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-300 border border-cyan-500/30 shadow-sm shadow-cyan-500/10"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent"
+                      ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 border border-transparent"
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    <Icon className={`h-4 w-4 ${isActive ? "text-cyan-400" : "text-slate-400"}`} />
+                    <Icon className={`h-4 w-4 ${isActive ? "text-blue-600" : "text-slate-500"}`} />
                     <span>{item.label}</span>
                   </div>
                   {item.badge && (
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-mono border ${
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-mono border font-medium ${
                         item.badgeColor
                           ? item.badgeColor
                           : isActive
-                          ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
-                          : "bg-white/5 text-slate-400 border-white/10"
+                          ? "bg-blue-100 text-blue-800 border-blue-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200"
                       }`}
                     >
                       {item.badge}
@@ -100,23 +100,23 @@ export default function Sidebar({ activeTab, setActiveTab, openDiscrepanciesCoun
         </div>
 
         {/* Project Context */}
-        <div className="rounded-xl border border-white/10 bg-slate-900/50 p-3.5">
-          <div className="flex items-center space-x-2 text-[11px] font-semibold text-slate-400">
-            <FolderKanban className="h-3.5 w-3.5 text-cyan-400" />
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+          <div className="flex items-center space-x-2 text-[11px] font-semibold text-slate-500">
+            <FolderKanban className="h-3.5 w-3.5 text-blue-600" />
             <span>Active Project</span>
           </div>
-          <div className="mt-2 text-xs font-bold text-slate-200 truncate">
+          <div className="mt-2 text-xs font-bold text-slate-900 truncate">
             Commercial Avionics WD-777
           </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
             <span>Documents: 14</span>
-            <span className="text-emerald-400 font-medium">92% Compliance</span>
+            <span className="text-emerald-700 font-semibold">92% Compliance</span>
           </div>
         </div>
       </div>
 
       {/* Bottom Help / Engine Version Footnote */}
-      <div className="pt-4 border-t border-white/10 space-y-2">
+      <div className="pt-4 border-t border-slate-200 space-y-1.5">
         <div className="flex items-center justify-between text-[11px] text-slate-500">
           <span className="flex items-center space-x-1">
             <HelpCircle className="h-3 w-3" />
@@ -124,7 +124,7 @@ export default function Sidebar({ activeTab, setActiveTab, openDiscrepanciesCoun
           </span>
           <span className="font-mono text-[10px]">Build v1.0.4-rc</span>
         </div>
-        <div className="text-[10px] text-slate-600 text-center">
+        <div className="text-[10px] text-slate-400 text-center">
           ISO 9001 / AS9100 Verified Architecture
         </div>
       </div>

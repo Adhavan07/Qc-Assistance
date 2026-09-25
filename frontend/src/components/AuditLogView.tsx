@@ -60,52 +60,52 @@ export default function AuditLogView() {
   return (
     <div className="max-w-6xl mx-auto p-8 space-y-8">
       <div>
-        <div className="flex items-center space-x-2 text-cyan-400 text-xs font-bold uppercase tracking-wider">
+        <div className="flex items-center space-x-2 text-blue-600 text-xs font-bold uppercase tracking-wider">
           <FileCheck2 className="h-4 w-4" />
           <span>AS9100 / ISO 9001 Compliance Audit Trail</span>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-white mt-1">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
           Cryptographic Compliance Activity Logs
         </h1>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-slate-500 mt-1">
           Immutable event log tracking all schematic uploads, AI inspections, findings reviews, and report generation.
         </p>
       </div>
 
-      <div className="glass-panel overflow-hidden">
-        <div className="p-5 border-b border-white/10 flex items-center justify-between">
+      <div className="pro-card overflow-hidden">
+        <div className="p-5 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Key className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+            <Key className="h-4 w-4 text-blue-600" />
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
               Tenant Event Stream
             </h3>
           </div>
-          <span className="text-xs text-emerald-400 font-mono bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20 flex items-center space-x-1">
-            <CheckCircle className="h-3 w-3" />
+          <span className="text-xs text-emerald-700 font-mono bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 flex items-center space-x-1 font-semibold">
+            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
             <span>Audit Chain Verified</span>
           </span>
         </div>
 
-        <div className="divide-y divide-white/5 text-xs">
+        <div className="divide-y divide-slate-100 text-xs">
           {auditLogs.map((log) => (
-            <div key={log.id} className="p-4 hover:bg-white/5 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div key={log.id} className="p-4 hover:bg-slate-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
-                  <span className="font-mono font-bold text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/20">
+                  <span className="font-mono font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                     {log.action}
                   </span>
                   <span className="text-slate-400">•</span>
-                  <span className="font-medium text-white">{log.resource}</span>
+                  <span className="font-semibold text-slate-900">{log.resource}</span>
                 </div>
-                <div className="text-slate-400 text-[11px]">{log.details}</div>
+                <div className="text-slate-500 text-[11px]">{log.details}</div>
               </div>
 
-              <div className="text-right text-[11px] text-slate-400 shrink-0 space-y-0.5">
-                <div className="text-slate-300 font-medium flex items-center justify-end space-x-1">
-                  <User className="h-3 w-3 text-cyan-400" />
+              <div className="text-right text-[11px] text-slate-500 shrink-0 space-y-0.5">
+                <div className="text-slate-800 font-semibold flex items-center justify-end space-x-1">
+                  <User className="h-3.5 w-3.5 text-blue-600" />
                   <span>{log.actor}</span>
                 </div>
-                <div className="font-mono text-slate-500">{log.timestamp} • IP: {log.ip}</div>
+                <div className="font-mono text-slate-400">{log.timestamp} • IP: {log.ip}</div>
               </div>
             </div>
           ))}
