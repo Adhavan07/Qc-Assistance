@@ -143,3 +143,35 @@ class QCAnalysisResult(BaseModel):
     prompt_version: str
     rules_version: str
     processing_time_ms: int = Field(..., ge=0)
+
+
+class AIFindingPayload(BaseModel):
+    """Raw structured finding emitted by an LLM before arbitration."""
+    finding_code: str = Field(..., description="Unique finding identifier, e.g. D-001")
+    rule_id: str = Field(..., description="Associated standard rule code, e.g. RULE-WG-001")
+    category: str = Field(..., description="Defect category: WIRE_SPEC, TERMINAL, COLOR_CODE, etc.")
+    description: str = Field(..., min_length=5, description="Clear description of the discrepancy")
+    severity: SeverityEnum
+    confidence_score: float = Field(..., ge=0.0, le=1.0)
+    confidence_level: ConfidenceLevelEnum
+    page_number: int = Field(..., ge=1)
+    location_bbox: Optional[BoundingBox] = None
+    evidence_text: str = Field(..., min_length=2, description="Observed text or graphical evidence")
+    requirement_text: str = Field(..., min_length=5, description="Engineering standard requirement")
+    standard_citation: str = Field(..., min_length=3, description="Specific clause or standard citation")
+    recommendation: str = Field(..., min_length=5, description="Actionable engineering correction")
+
+    @field_validator("finding_code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        if not v.startswith("D-"):
+            return f"D-{v}"
+        return v
+
+
+class AIAnalysisPayload(BaseModel):
+    """Complete structured response emitted by an AI Provider."""
+    prompt_version: str
+    findings: List[AIFindingPayload] = Field(default_factory=list)
+    summary_notes: Optional[str] = None
+

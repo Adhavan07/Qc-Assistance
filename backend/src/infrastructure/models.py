@@ -44,6 +44,7 @@ class Organization(Base):
     documents: Mapped[List["Document"]] = relationship("Document", back_populates="organization", cascade="all, delete-orphan")
     qc_runs: Mapped[List["QCRun"]] = relationship("QCRun", back_populates="organization", cascade="all, delete-orphan")
     processing_jobs: Mapped[List["ProcessingJob"]] = relationship("ProcessingJob", back_populates="organization", cascade="all, delete-orphan")
+    ai_request_logs: Mapped[List["AIRequestLog"]] = relationship("AIRequestLog", back_populates="organization", cascade="all, delete-orphan")
     audit_logs: Mapped[List["AuditLog"]] = relationship("AuditLog", back_populates="organization", cascade="all, delete-orphan")
 
 
@@ -214,9 +215,35 @@ class ProcessingJob(Base):
     document: Mapped["Document"] = relationship("Document", back_populates="processing_jobs")
 
 
+class AIRequestLog(Base):
+    __tablename__ = "ai_request_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    qc_run_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("qc_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    document_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    latency_ms: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="SUCCESS", nullable=False)  # SUCCESS, FAILED, TIMEOUT
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship("Organization", back_populates="ai_request_logs")
+
+
 # Composite indexes for multi-tenant query acceleration
 Index("idx_doc_org_checksum", Document.organization_id, Document.sha256_checksum)
 Index("idx_qc_runs_org_status", QCRun.organization_id, QCRun.overall_status)
 Index("idx_proc_job_org_status", ProcessingJob.organization_id, ProcessingJob.status)
 Index("idx_proc_job_doc_status", ProcessingJob.document_id, ProcessingJob.status)
 Index("idx_audit_org_action", AuditLog.organization_id, AuditLog.action, AuditLog.created_at)
+Index("idx_ai_log_org_created", AIRequestLog.organization_id, AIRequestLog.created_at)
+Index("idx_ai_log_provider_model", AIRequestLog.provider, AIRequestLog.model_name)
+

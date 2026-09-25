@@ -7,6 +7,37 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 5: AI Analysis] — 2026-09-25
+
+### Added
+- **AI Provider Abstraction Layer (`backend/src/ai/llm_adapter.py`)**:
+  - `AIProviderInterface`: Decoupled contract standardizing multimodal structured analysis, latency tracking, and token pricing across foundation model providers.
+  - `MockAIProvider`: High-speed, deterministic offline provider with contextual finding generation, configurable synthetic injection, simulated latency, timeout simulation, and failure simulation.
+  - `OpenAIProvider`: Production async adapter for GPT-4o and GPT-4o-mini with native JSON mode (`response_format={"type": "json_object"}`), automatic retry with exponential backoff, and token pricing computation.
+  - `AnthropicProvider`: Production async adapter for Claude 3.5 Sonnet and Haiku with JSON extraction and token cost accounting.
+  - `AIProviderFactory`: Dynamic provider resolution configured via environment (`AI_PROVIDER="mock"` default).
+- **Client Validated Prompt Asset (`backend/src/ai/prompts/wiring_qc_v1_0.py`)**:
+  - Encapsulated Spandsons Horizon Engineering's proprietary inspection directives as a versioned asset (`wiring-qc-prompt-v1.0`).
+  - Covers international standards: IPC/WHMA-A-620D, UL 508A, MIL-STD-681D, and ISO 7200 across 5 mandatory categories: Wire Sizing, Color Coding Ambiguity, Terminal/Connector Designators, Title Block ISO Data Fields, and General Notes Consistency.
+  - Anti-indirect prompt injection defense: Drawing text is framed strictly as passive data inside `<drawing_data>` delimiters.
+  - Proprietary trade secret concealment: System instructions are maintained strictly server-side and never returned in customer API responses.
+- **Prompt Manager & Governance (`backend/src/ai/prompt_manager.py`)**:
+  - `PromptManager`: Registry managing prompt compilation, JSON output schemas, and safe XML data serialization of IDR representations.
+- **Pydantic Schema Validation & JSON Repair (`backend/src/ai/schemas.py`, `backend/src/ai/llm_adapter.py`)**:
+  - Added `AIFindingPayload` and `AIAnalysisPayload` with strict field validation (`finding_code`, `rule_id`, `severity`, `confidence_score`, `location_bbox`, `evidence_text`, `recommendation`).
+  - Implemented `parse_and_validate_ai_json` and `extract_json_from_llm_text` with automatic markdown code fence stripping and format recovery.
+- **AI Analysis Service & Database Observability (`backend/src/ai/service.py`)**:
+  - `AIAnalysisService`: Coordinates prompt compilation, provider execution, schema validation, and exponential backoff retry recovery.
+  - Implemented database logging via `AIRequestLog` recording `provider`, `model_name`, `prompt_version`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `estimated_cost_usd`, `latency_ms`, and `status`.
+- **Database Model & Composite Indexes (`backend/src/infrastructure/models.py`)**:
+  - Added `AIRequestLog` entity with foreign keys to `organizations`, `documents`, and `qc_runs`.
+  - Added composite indexes: `idx_ai_log_org_created` and `idx_ai_log_provider_model`.
+- **AI Fixture Test Suite (`tests/unit/test_ai_analysis.py`)**:
+  - Added 7 comprehensive test fixtures validating mock output, JSON fence extraction, prompt asset v1.0 governance, database logging, timeout detection, retry recovery, and cloud pricing formulas.
+  - Test suite expanded from 50 to **57 tests passing (100%)**.
+
+---
+
 ## [Phase 4: Document Processing] — 2026-09-25
 
 ### Added

@@ -45,6 +45,18 @@ class Settings(BaseSettings):
     # Redis / Task Queue
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # AI Provider & Prompt Governance
+    AI_PROVIDER: str = Field(default="mock", description="AI Provider: mock, openai, anthropic, gemini")
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o"
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-1.5-pro"
+    AI_TIMEOUT_SECONDS: float = 30.0
+    AI_MAX_RETRIES: int = 3
+    PROMPT_VERSION_DEFAULT: str = "wiring-qc-prompt-v1.0"
+
     # CORS
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
@@ -55,3 +67,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
