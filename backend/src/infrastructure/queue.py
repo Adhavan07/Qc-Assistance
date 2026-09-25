@@ -15,6 +15,8 @@ class QCJobPayload(BaseModel):
     organization_id: str
     file_path: str
     standards: List[str]
+    rule_pack_ids: Optional[List[str]] = None
+    enable_ai: bool = True
 
 
 class TaskQueueInterface(ABC):

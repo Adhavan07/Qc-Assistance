@@ -80,6 +80,8 @@ async def trigger_qc_run(
         organization_id=current_user.organization_id,
         file_path=doc.storage_path,
         standards=payload.standards,
+        rule_pack_ids=payload.rule_pack_ids,
+        enable_ai=payload.enable_ai,
     )
     await queue.enqueue(job)
 
@@ -87,7 +89,11 @@ async def trigger_qc_run(
         id=qc_run.id,
         organization_id=qc_run.organization_id,
         document_id=qc_run.document_id,
+        pipeline_status=getattr(qc_run, "pipeline_status", "QUEUED"),
         overall_status=qc_run.overall_status,
+        current_step=getattr(qc_run, "current_step", "QUEUED"),
+        progress_percent=getattr(qc_run, "progress_percent", 0),
+        error_message=getattr(qc_run, "error_message", None),
         checks_total=qc_run.checks_total,
         checks_passed=qc_run.checks_passed,
         checks_failed=qc_run.checks_failed,
@@ -121,7 +127,11 @@ async def get_qc_run_status(
         id=run.id,
         organization_id=run.organization_id,
         document_id=run.document_id,
+        pipeline_status=getattr(run, "pipeline_status", run.overall_status),
         overall_status=run.overall_status,
+        current_step=getattr(run, "current_step", run.overall_status),
+        progress_percent=getattr(run, "progress_percent", 100 if run.completed_at else 0),
+        error_message=getattr(run, "error_message", None),
         checks_total=run.checks_total,
         checks_passed=run.checks_passed,
         checks_failed=run.checks_failed,

@@ -7,6 +7,36 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 7: QC Pipeline] — 2026-09-25
+
+### Added
+- **Unified 8-Stage QC Pipeline Orchestrator (`backend/src/services/qc_pipeline.py`)**:
+  - `QCPipelineOrchestrator`: Implements the end-to-end engineering QC pipeline connecting document rasterization, spatial IDR extraction, AI reasoning, schema validation, deterministic rule packs, finding arbitration, and report persistence.
+  - Pipeline stages: `UPLOAD` -> `PROCESS` -> `EXTRACT` -> `ANALYZE` -> `VALIDATE` -> `RUN RULES` -> `MERGE FINDINGS` -> `GENERATE REPORT`.
+- **Formal State Machine Implementation (`backend/src/services/qc_pipeline.py`, `backend/src/infrastructure/models.py`)**:
+  - Implemented the 7 mandatory lifecycle states: `QUEUED` -> `PROCESSING` -> `ANALYZING` -> `RUNNING_RULES` -> `GENERATING_REPORT` -> `COMPLETED` / `FAILED`.
+  - Granular step milestone tracking: `RASTERIZING_PAGES`, `EXTRACTING_STRUCTURED_DATA`, `AI_REASONING`, `VALIDATING_AI_OUTPUT`, `EVALUATING_DETERMINISTIC_RULES`, `MERGING_AND_ARBITRATING_FINDINGS`, `GENERATING_REPORT_DATA`, `PERSISTING_FINDINGS`.
+  - Progress percentage mapping: 0% -> 20% -> 45% -> 70% -> 90% -> 100%.
+  - Resilient fault handling: automated credit refunding upon fatal pipeline errors and immutable audit logging.
+- **Finding Arbitration & Deduplication Engine (`FindingArbiter` in `backend/src/services/qc_pipeline.py`)**:
+  - Cross-source finding correlation matching deterministic rules with AI findings by page, rule ID, and component/wire tokens.
+  - Confidence scoring synthesis: agreement between deterministic rule and AI reinforces confidence (`fused_score = min(0.99, max(det, ai) + 0.01)`).
+  - Novel AI candidate filtering with strict confidence threshold (>= 0.70 score).
+  - Clean sequential renumbering: `D-001`, `D-002`, `D-003`, ... sorted by page and defect severity.
+  - Metrics computation (`checks_total`, `checks_passed`, `checks_failed`, `checks_review`) and compliance determination (`PASS`, `FAIL`, `REVIEW_REQUIRED`).
+- **Real-Time Server-Sent Events (SSE) Streaming (`QCPipelineEventHub`, `backend/src/api/routers/qc_runs.py`)**:
+  - In-memory event broker broadcasting state machine transitions and live percentage progress to `/api/v1/qc-runs/{qc_run_id}/stream`.
+- **Background Worker Dispatch Integration (`backend/src/services/qc_worker.py`)**:
+  - Connected asynchronous background queue execution directly to `QCPipelineOrchestrator`.
+- **Database Model & Migration (`backend/alembic/versions/002_qc_pipeline_state_machine.py`, `backend/src/infrastructure/models.py`)**:
+  - Added `pipeline_status`, `current_step`, `progress_percent`, and `error_message` columns to `QCRun` model.
+  - Created Alembic migration `002_qc_pipeline` with index on `pipeline_status`.
+- **Pipeline Test Suite (`tests/unit/test_qc_pipeline.py`)**:
+  - Added 6 comprehensive test fixtures validating finding fusion, deterministic authority, AI confidence thresholds, sequential renumbering, SSE event hub pub/sub, and full end-to-end pipeline execution on synthetic drawing PDFs.
+  - Test suite expanded from 73 to **79 tests passing (100%)**.
+
+---
+
 ## [Phase 6: QC Rule Engine] — 2026-09-25
 
 ### Added

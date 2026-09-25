@@ -80,6 +80,8 @@ class DocumentDownloadResponse(BaseModel):
 class CreateQCRunRequest(BaseModel):
     document_id: str
     standards: List[str] = Field(default_factory=lambda: ["IPC-WHMA-A-620D", "UL 508A"])
+    rule_pack_ids: Optional[List[str]] = None
+    enable_ai: bool = True
 
 
 class QCFindingResponse(BaseModel):
@@ -104,7 +106,11 @@ class QCRunResponse(BaseModel):
     id: str
     organization_id: str
     document_id: str
+    pipeline_status: str = "QUEUED"
     overall_status: str
+    current_step: Optional[str] = None
+    progress_percent: int = 0
+    error_message: Optional[str] = None
     checks_total: int
     checks_passed: int
     checks_failed: int
