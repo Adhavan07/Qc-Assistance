@@ -4,7 +4,7 @@
  * Includes graceful fallback to realistic engineering mock data when backend is unreachable.
  */
 
-import { Organization, QCFinding, QCRun, User } from "../types";
+import { AuthTokens, Organization, QCFinding, QCRun, User } from "../types";
 import {
   MOCK_FINDINGS,
   MOCK_ORGANIZATION,
@@ -62,14 +62,121 @@ async function request<T>(endpoint: string, options: FetchOptions = {}, fallback
 
 export const qcApi = {
   // Auth
+  async login(payload: { email: string; password: string }): Promise<AuthTokens> {
+    return request<AuthTokens>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async register(payload: {
+    organization_name: string;
+    organization_slug: string;
+    full_name: string;
+    email: string;
+    password: string;
+  }): Promise<AuthTokens> {
+    return request<AuthTokens>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async refreshToken(refreshToken: string): Promise<AuthTokens> {
+    return request<AuthTokens>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  },
+
+  async logout(token?: string | null): Promise<{ message: string }> {
+    return request<{ message: string }>("/auth/logout", {
+      method: "POST",
+      token,
+    }, { message: "Logged out" });
+  },
+
   async getCurrentUser(token?: string | null): Promise<User> {
     return request<User>("/auth/me", { token }, MOCK_USER);
   },
 
-  // Organizations
+  async updateCurrentUserProfile(payload: { full_name: string }, token?: string | null): Promise<User> {
+    return request<User>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      token,
+    }, { ...MOCK_USER, full_name: payload.full_name });
+  },
+
+  // Organizations & Members
+  async getCurrentOrganization(token?: string | null): Promise<Organization> {
+    return request<Organization>("/organizations/me", { token }, MOCK_ORGANIZATION);
+  },
+
+  async updateCurrentOrganization(payload: { name: string }, token?: string | null): Promise<Organization> {
+    return request<Organization>("/organizations/me", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      token,
+    }, { ...MOCK_ORGANIZATION, name: payload.name });
+  },
+
   async getOrganization(orgId: string, token?: string | null): Promise<Organization> {
     return request<Organization>(`/organizations/${orgId}`, { token }, MOCK_ORGANIZATION);
   },
+
+  async listMembers(token?: string | null): Promise<User[]> {
+    return request<User[]>("/organizations/members", { token }, [
+      MOCK_USER,
+      {
+        id: "usr-gogulnath",
+        email: "gogulnath@spandsons.com",
+        full_name: "Gogulnath",
+        role: "ENGINEER",
+        organization_id: "org-spandsons-01",
+        is_active: true,
+      },
+      {
+        id: "usr-inspector",
+        email: "inspector@spandsons.com",
+        full_name: "Senior Avionics QC Inspector",
+        role: "INSPECTOR",
+        organization_id: "org-spandsons-01",
+        is_active: true,
+      },
+    ]);
+  },
+
+  async inviteMember(
+    payload: { email: string; full_name: string; role: string; password: string },
+    token?: string | null
+  ): Promise<User> {
+    return request<User>("/organizations/members", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token,
+    });
+  },
+
+  async updateMember(
+    memberId: string,
+    payload: { role?: string; is_active?: boolean; full_name?: string },
+    token?: string | null
+  ): Promise<User> {
+    return request<User>(`/organizations/members/${memberId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      token,
+    });
+  },
+
+  async deleteMember(memberId: string, token?: string | null): Promise<{ message: string }> {
+    return request<{ message: string }>(`/organizations/members/${memberId}`, {
+      method: "DELETE",
+      token,
+    }, { message: "Member removed" });
+  },
+
 
   // Projects & Documents
   async listProjects(token?: string | null) {

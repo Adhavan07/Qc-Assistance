@@ -72,6 +72,7 @@ export interface Organization {
   slug: string;
   plan_tier: string;
   credits_remaining: number;
+  created_at?: string;
 }
 
 export interface User {
@@ -80,4 +81,16 @@ export interface User {
   full_name: string;
   role: UserRole;
   organization_id: string;
+  is_active?: boolean;
+  created_at?: string;
 }
+
+export interface AuthTokens {
+  access_token: string;
+  refresh_token?: string;
+  token_type: string;
+  expires_in_seconds: number;
+  user?: User;
+  organization?: Organization;
+}
+

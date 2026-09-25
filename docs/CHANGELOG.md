@@ -7,6 +7,41 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 2: Authentication + Multi-Tenancy] — 2026-09-25
+
+### Added
+- **Tenant Self-Service Provisioning & Identity Management (`backend/src/api/routers/auth.py`)**:
+  - Atomic organization provisioning + initial `OWNER` account creation (`POST /api/v1/auth/register`).
+  - Cryptographically signed JWT tokens with claims: `sub` (user_id), `org_id` (tenant_id), `role`, `type` ("access" vs "refresh" vs "password_reset").
+  - Refresh token exchange flow (`POST /api/v1/auth/refresh`) generating new access and refresh tokens.
+  - User logout endpoint (`POST /api/v1/auth/logout`) logging immutable `USER_LOGGED_OUT` audit trails.
+  - User profile management (`GET /api/v1/auth/me`, `PATCH /api/v1/auth/me`).
+  - Secure password management: salted bcrypt hashing, password change (`POST /api/v1/auth/change-password`), password reset token generation and confirmation (`POST /api/v1/auth/password-reset/request`, `POST /api/v1/auth/password-reset/confirm`).
+- **Strict Multi-Tenancy & Logical Partitioning (`backend/src/api/routers/organizations.py`)**:
+  - Hard security rule enforced across all endpoints: `organization_id` is derived exclusively from authenticated JWT claims, never from client request parameters.
+  - Multi-tenant data isolation verified: cross-tenant access attempts return 404 Not Found to prevent data exposure and resource existence leakage.
+  - Sole-Owner Protection: Prevents an organization from accidentally demoting or deleting its last remaining active OWNER account.
+  - Privilege Escalation Guards: Prevents lower-tier roles (ENGINEER, INSPECTOR, VIEWER) from managing members, and prevents ADMINs from creating, elevating, modifying, or deleting OWNER accounts.
+- **Organization & Member Management (`backend/src/api/routers/organizations.py`)**:
+  - Tenant profile retrieval and name updates (`GET /api/v1/organizations/me`, `PATCH /api/v1/organizations/me`).
+  - Tenant-scoped member listing (`GET /api/v1/organizations/members`).
+  - Team member invitations with role assignments (`POST /api/v1/organizations/members`).
+  - Member role and status updates (`PATCH /api/v1/organizations/members/{id}`).
+  - Member deletion (`DELETE /api/v1/organizations/members/{id}`).
+- **Immutable Security Audit Logging**:
+  - Every auth and tenancy event generates an immutable `AuditLog` entry: `ORGANIZATION_REGISTERED`, `USER_LOGGED_IN`, `USER_LOGGED_OUT`, `USER_PROFILE_UPDATED`, `PASSWORD_CHANGED`, `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_CONFIRMED`, `ORGANIZATION_UPDATED`, `MEMBER_ADDED`, `MEMBER_UPDATED`, `MEMBER_REMOVED`.
+- **Frontend SaaS Integration (`frontend/src/`)**:
+  - `AuthModal.tsx`: High-contrast, clean white enterprise sign-in and tenant registration modal with demo shortcuts.
+  - `TeamModal.tsx`: Organization and team member management modal allowing owners/admins to view members, invite engineers/inspectors, update roles, and inspect QC credit balances.
+  - `Navbar.tsx`: Integrated user menu with Organization & Team modal launcher, Tenant switcher, and secure session logout.
+  - `auth-context.tsx`: Full session persistence with `localStorage`, real API client calls, and automatic profile re-hydration.
+- **Verification**:
+  - Test suite expanded from 35 to **40 tests** covering refresh tokens, password resets, IDOR attacks, and privilege escalation guards.
+  - All **40/40 tests passing** in 15.49s.
+  - `npm run build` / Next.js production compilation passing with **0 errors**.
+
+---
+
 ## [Phase 1: Project Foundation & Containerized Monorepo] — 2026-09-25
 
 ### Added

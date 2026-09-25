@@ -136,3 +136,184 @@ async def test_organization_me_returns_isolated_tenant(multi_tenant_client: Asyn
         headers={"Authorization": f"Bearer {token2}"},
     )
     assert org2_resp.json()["slug"] == "tenant-two"
+
+
+@pytest.mark.anyio
+async def test_cross_tenant_idor_member_mutation(multi_tenant_client: AsyncClient):
+    # 1. Register Org Red
+    red_resp = await multi_tenant_client.post(
+        "/api/v1/auth/register",
+        json={
+            "organization_name": "Red Corp",
+            "organization_slug": "red-corp",
+            "full_name": "Red Owner",
+            "email": "owner@red.com",
+            "password": "Password123!",
+        },
+    )
+    red_token = red_resp.json()["access_token"]
+
+    # Red adds a member
+    red_member_resp = await multi_tenant_client.post(
+        "/api/v1/organizations/members",
+        headers={"Authorization": f"Bearer {red_token}"},
+        json={
+            "email": "engineer@red.com",
+            "full_name": "Red Engineer",
+            "role": "ENGINEER",
+            "password": "Password123!",
+        },
+    )
+    assert red_member_resp.status_code == 201
+    red_member_id = red_member_resp.json()["id"]
+
+    # 2. Register Org Blue
+    blue_resp = await multi_tenant_client.post(
+        "/api/v1/auth/register",
+        json={
+            "organization_name": "Blue Corp",
+            "organization_slug": "blue-corp",
+            "full_name": "Blue Owner",
+            "email": "owner@blue.com",
+            "password": "Password123!",
+        },
+    )
+    blue_token = blue_resp.json()["access_token"]
+
+    # 3. IDOR Attack: Blue attempts to PATCH Red's member (MUST return 404, never 200 or 500)
+    idor_patch = await multi_tenant_client.patch(
+        f"/api/v1/organizations/members/{red_member_id}",
+        headers={"Authorization": f"Bearer {blue_token}"},
+        json={"full_name": "Compromised Name"},
+    )
+    assert idor_patch.status_code == 404
+    assert "Member not found in your organization" in idor_patch.json()["detail"]
+
+    # 4. IDOR Attack: Blue attempts to DELETE Red's member (MUST return 404)
+    idor_delete = await multi_tenant_client.delete(
+        f"/api/v1/organizations/members/{red_member_id}",
+        headers={"Authorization": f"Bearer {blue_token}"},
+    )
+    assert idor_delete.status_code == 404
+    assert "Member not found in your organization" in idor_delete.json()["detail"]
+
+    # 5. Verify Red member was completely untouched
+    red_members_resp = await multi_tenant_client.get(
+        "/api/v1/organizations/members",
+        headers={"Authorization": f"Bearer {red_token}"},
+    )
+    red_members = red_members_resp.json()
+    engineer = next(m for m in red_members if m["id"] == red_member_id)
+    assert engineer["full_name"] == "Red Engineer"
+
+
+@pytest.mark.anyio
+async def test_member_lifecycle_and_sole_owner_guards(multi_tenant_client: AsyncClient):
+    # 1. Register Acme Corp
+    acme_resp = await multi_tenant_client.post(
+        "/api/v1/auth/register",
+        json={
+            "organization_name": "Acme Systems",
+            "organization_slug": "acme-sys",
+            "full_name": "Acme Owner",
+            "email": "owner@acme.com",
+            "password": "Password123!",
+        },
+    )
+    owner_token = acme_resp.json()["access_token"]
+    owner_id = acme_resp.json()["user"]["id"]
+
+    # 2. Owner updates Organization Name
+    org_patch = await multi_tenant_client.patch(
+        "/api/v1/organizations/me",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"name": "Acme Advanced Systems"},
+    )
+    assert org_patch.status_code == 200
+    assert org_patch.json()["name"] == "Acme Advanced Systems"
+
+    # 3. Owner adds an ADMIN and an ENGINEER
+    admin_add = await multi_tenant_client.post(
+        "/api/v1/organizations/members",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "email": "admin@acme.com",
+            "full_name": "Acme Admin",
+            "role": "ADMIN",
+            "password": "Password123!",
+        },
+    )
+    assert admin_add.status_code == 201
+    admin_id = admin_add.json()["id"]
+
+    eng_add = await multi_tenant_client.post(
+        "/api/v1/organizations/members",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "email": "engineer@acme.com",
+            "full_name": "Acme Engineer",
+            "role": "ENGINEER",
+            "password": "Password123!",
+        },
+    )
+    assert eng_add.status_code == 201
+    eng_id = eng_add.json()["id"]
+
+    # Login as Admin
+    admin_login = await multi_tenant_client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@acme.com", "password": "Password123!"},
+    )
+    admin_token = admin_login.json()["access_token"]
+
+    # 4. Privilege Escalation: Admin tries to promote Engineer to OWNER (MUST fail 403)
+    escalate_resp = await multi_tenant_client.patch(
+        f"/api/v1/organizations/members/{eng_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"role": "OWNER"},
+    )
+    assert escalate_resp.status_code == 403
+    assert "Only an OWNER can promote a member to OWNER" in escalate_resp.json()["detail"]
+
+    # 5. Admin tries to demote or alter the OWNER (MUST fail 403)
+    admin_attack_owner = await multi_tenant_client.patch(
+        f"/api/v1/organizations/members/{owner_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"role": "VIEWER"},
+    )
+    assert admin_attack_owner.status_code == 403
+    assert "Only an OWNER can modify an OWNER account" in admin_attack_owner.json()["detail"]
+
+    # 6. Admin tries to delete the OWNER (MUST fail 403)
+    admin_delete_owner = await multi_tenant_client.delete(
+        f"/api/v1/organizations/members/{owner_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert admin_delete_owner.status_code == 403
+    assert "Only an OWNER can remove an OWNER account" in admin_delete_owner.json()["detail"]
+
+    # 7. Self-Deletion Prevention: Owner tries to delete themselves (MUST fail 400)
+    self_delete = await multi_tenant_client.delete(
+        f"/api/v1/organizations/members/{owner_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert self_delete.status_code == 400
+    assert "Cannot delete your own account" in self_delete.json()["detail"]
+
+    # 8. Sole Owner Protection: Owner tries to demote themselves to VIEWER (MUST fail 400)
+    demote_sole_owner = await multi_tenant_client.patch(
+        f"/api/v1/organizations/members/{owner_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"role": "VIEWER"},
+    )
+    assert demote_sole_owner.status_code == 400
+    assert "Cannot demote or deactivate the sole owner" in demote_sole_owner.json()["detail"]
+
+    # 9. Clean deletion: Owner removes Engineer (Succeeds 200)
+    del_eng = await multi_tenant_client.delete(
+        f"/api/v1/organizations/members/{eng_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert del_eng.status_code == 200
+    assert "successfully removed" in del_eng.json()["message"]
+

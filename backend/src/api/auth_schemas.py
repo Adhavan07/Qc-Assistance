@@ -39,10 +39,13 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1)
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in_seconds: int
+class OrganizationResponse(BaseModel):
+    id: str
+    name: str
+    slug: str
+    plan_tier: str
+    credits_remaining: int
+    created_at: Optional[str] = None
 
 
 class UserResponse(BaseModel):
@@ -52,18 +55,54 @@ class UserResponse(BaseModel):
     role: UserRole
     organization_id: str
     is_active: bool
+    created_at: Optional[str] = None
 
 
-class OrganizationResponse(BaseModel):
-    id: str
-    name: str
-    slug: str
-    plan_tier: str
-    credits_remaining: int
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: Optional[str] = None
+    token_type: str = "bearer"
+    expires_in_seconds: int
+    user: Optional[UserResponse] = None
+    organization: Optional[OrganizationResponse] = None
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=10)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, description="Minimum 8 characters")
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=255)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=10)
+    new_password: str = Field(..., min_length=8, description="Minimum 8 characters")
 
 
 class InviteMemberRequest(BaseModel):
-    email: str = Field(..., min_length=5)
-    full_name: str = Field(..., min_length=2)
+    email: str = Field(..., min_length=5, max_length=255)
+    full_name: str = Field(..., min_length=2, max_length=255)
     role: UserRole = UserRole.INSPECTOR
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, description="Temporary or initial password")
+
+
+class UpdateMemberRequest(BaseModel):
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+    full_name: Optional[str] = Field(None, min_length=2, max_length=255)
+
+
+class UpdateOrganizationRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=255)
+
+
+class MessageResponse(BaseModel):
+    message: str
+    detail: Optional[str] = None
+
