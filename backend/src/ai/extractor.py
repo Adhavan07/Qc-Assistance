@@ -32,8 +32,9 @@ COLOR_PATTERN = re.compile(
 )
 
 # Wire identifier pattern (e.g., "W101", "WIRE-12", "NET_204")
+# Negative lookbehind prevents matching standard specifications like "MIL-W-22759"
 WIRE_ID_PATTERN = re.compile(
-    r"\b(W(?:IRE)?[-_]?\d+|NET[-_]?\d+|HARN[-_]?\d+)\b", re.IGNORECASE
+    r"(?<![A-Za-z0-9\-_])(W\d+|WIRE[-_]?\d+|NET[-_]?\d+|HARN[-_]?\d+)\b", re.IGNORECASE
 )
 
 # Connector / Device designators (e.g., "J1", "P2", "TB1", "K1", "SW1", "CON3")
@@ -165,6 +166,21 @@ class DocumentExtractor:
         counter = 1
 
         for idx, line in enumerate(lines):
+            line_upper = line.upper().strip()
+            # Exclude title blocks, notes, connectors list, and specification references
+            if (
+                line_upper.startswith("NOTE")
+                or line_upper.startswith("TITLE:")
+                or line_upper.startswith("DWG")
+                or line_upper.startswith("DRAWN BY:")
+                or line_upper.startswith("APPROVED BY:")
+                or line_upper.startswith("CONNECTORS:")
+                or "MIL-W-" in line_upper
+                or "MIL-DTL-" in line_upper
+                or "MIL-STD-" in line_upper
+            ):
+                continue
+
             # Check if line indicates a wire or contains wire-like attributes
             has_wire_id = WIRE_ID_PATTERN.search(line)
             has_gauge = WIRE_GAUGE_PATTERN.search(line)
