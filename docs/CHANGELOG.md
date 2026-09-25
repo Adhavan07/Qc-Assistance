@@ -7,6 +7,36 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 4: Authentication, RBAC & Multi-Tenancy] — 2026-09-25
+
+### Added
+- **Security & Cryptography (`backend/src/core/security.py`)**:
+  - Salted password hashing and verification using `bcrypt`.
+  - Signed JWT token creation and validation (`pyjwt`) encoding user ID, tenant ID, and role claims.
+  - Expiration and tamper-evident signature validation.
+- **Auth & RBAC Schemas (`backend/src/api/auth_schemas.py`)**:
+  - `UserRole` enumeration (`OWNER`, `ADMIN`, `ENGINEER`, `INSPECTOR`, `VIEWER`, `SUPER_ADMIN`) with explicit hierarchy levels.
+  - Pydantic models for registration, login, JWT token responses, user profiles, organization summaries, and member invitations.
+- **Authentication & RBAC Route Guards (`backend/src/api/deps_auth.py`)**:
+  - `oauth2_scheme` integration for OpenAPI Bearer auth.
+  - `get_current_user`: Token extraction, signature verification, and active database user loading.
+  - `require_role(minimum_role)`: Strict hierarchical authorization guard preventing privilege escalation.
+- **Authentication Router (`backend/src/api/routers/auth.py`)**:
+  - `POST /api/v1/auth/register`: Atomic organization provisioning and initial OWNER user creation with free trial credits. Duplicate email and slug rejection.
+  - `POST /api/v1/auth/login`: Credential validation and JWT access token issuance.
+  - `GET /api/v1/auth/me`: Authenticated user identity and active tenant context.
+- **Organization & Member Router (`backend/src/api/routers/organizations.py`)**:
+  - `GET /api/v1/organizations/me`: Current tenant organization details and remaining check quota.
+  - `GET /api/v1/organizations/members`: Isolated listing of users belonging strictly to caller's organization.
+  - `POST /api/v1/organizations/members`: Member invitation endpoint guarded by `require_role(UserRole.ADMIN)` with privilege escalation checks.
+- **Cross-Tenant Security & RBAC Test Suites**:
+  - `tests/unit/test_security.py`: Password hashing, JWT claims, expiration, and tampered token detection.
+  - `tests/integration/test_auth_api.py`: Registration, duplicate rejection, login, profile, and role-based invitation restrictions.
+  - `tests/integration/test_multi_tenancy_isolation.py`: Explicit IDOR / cross-tenant attack tests verifying that Company Beta cannot view or leak Company Alpha's users or resources.
+  - Test result: **32/32 tests passed across all suites**.
+
+---
+
 ## [Phase 3: Database & Backend Foundation] — 2026-09-25
 
 ### Added
