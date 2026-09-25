@@ -12,7 +12,10 @@ All significant architectural decisions, codebase modifications, schema changes,
 ### Added
 - **Modern Next.js 16 (App Router) + TypeScript Architecture (`frontend/`)**:
   - Initialized with React 19, Lucide React icons, Turbopack, and strict TypeScript configurations.
-  - Dark-mode blueprint engineering design system configured in `frontend/src/app/globals.css` with responsive glassmorphic cards, glowing severity accents, custom scrollbars, and engineering grid patterns.
+  - Clean, high-contrast white professional enterprise design system configured in `frontend/src/app/globals.css` with responsive cards, soft elevation shadows, crisp typography, and authentic drafting grid patterns.
+  - Resolved SSR hydration warnings by replacing dynamic `Date.now()` and locale date evaluations with static ISO strings and deterministic formatting.
+  - Added `suppressHydrationWarning` on `<html>` and `<body>` to prevent third-party browser translation/extension injection errors.
+  - Added mouse wheel zoom (`onWheel`) support to the interactive schematic canvas.
 - **Data Models & API Client (`frontend/src/types/`, `frontend/src/lib/`)**:
   - `types/index.ts`: Strong typing mirroring FastAPI Pydantic models (`QCRun`, `QCFinding`, `BoundingBox`, `Organization`, `User`, `Severity`).
   - `lib/api.ts`: Robust API client communicating with FastAPI endpoints (`/auth`, `/documents`, `/qc-runs`, `/organizations`), equipped with graceful fallbacks to high-fidelity engineering mock data for offline preview and demonstration resilience.
