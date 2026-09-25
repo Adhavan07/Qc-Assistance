@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..core.logging import setup_logging
 from .deps import get_db
-from .routers import auth_router, organizations_router
+from .routers import (
+    auth_router,
+    documents_router,
+    organizations_router,
+    qc_runs_router,
+)
 
 # Initialize structured logging
 setup_logging()
@@ -95,4 +100,6 @@ async def system_info() -> Dict[str, str]:
 # Mount Routers
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(organizations_router, prefix=settings.API_V1_STR)
+app.include_router(documents_router, prefix=settings.API_V1_STR)
+app.include_router(qc_runs_router, prefix=settings.API_V1_STR)
 

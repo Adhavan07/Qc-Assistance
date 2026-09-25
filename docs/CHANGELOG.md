@@ -7,6 +7,32 @@ All significant architectural decisions, codebase modifications, schema changes,
 
 ---
 
+## [Phase 5: Asynchronous QC Worker Pipeline] — 2026-09-25
+
+### Added
+- **Document & QC Schemas (`backend/src/api/document_schemas.py`)**:
+  - Pydantic models for project creation, presigned upload intent, document confirmation, QC run execution requests, run status responses, and finding details with spatial coordinates.
+- **Background QC Worker Service (`backend/src/services/qc_worker.py`)**:
+  - `process_qc_job`: Consumes enqueued payloads, transitions status to `PROCESSING`, executes `QCAnalysisEngine.analyze()`, maps and persists findings to `qc_findings`, records compliance audit logs, and handles failures with automatic credit refunding on system errors.
+- **Documents & Projects Router (`backend/src/api/routers/documents.py`)**:
+  - `POST /api/v1/projects`: Creates tenant-isolated project containers.
+  - `GET /api/v1/projects`: Lists projects belonging strictly to caller's organization.
+  - `POST /api/v1/documents/upload-intent`: Issues S3 presigned POST upload URLs partitioned by tenant path: `tenants/{org_id}/documents/{doc_id}/original/{filename}`.
+  - `POST /api/v1/documents/{id}/confirm`: Validates file size, checksum, and registers document record in PostgreSQL.
+  - `GET /api/v1/documents`: Lists documents filtered by project and organization.
+  - `GET /api/v1/documents/{id}`: Retrieves document metadata with tenant access check.
+- **QC Runs & Findings Router (`backend/src/api/routers/qc_runs.py`)**:
+  - `POST /api/v1/qc-runs`: Deducts 1 check credit from organization atomically, creates `QCRun` (`QUEUED`), and enqueues job onto `TaskQueue`. Blocks execution with `402 Payment Required` if organization credits are exhausted.
+  - `GET /api/v1/qc-runs/{id}`: Polls execution status, checks summary, and pass/fail verdict.
+  - `GET /api/v1/qc-runs/{id}/findings`: Returns structured findings filterable by severity and page number.
+  - `GET /api/v1/qc-runs/{id}/stream`: Server-Sent Events (SSE) streaming real-time progress events (`10%` -> `50%` -> `100%`) to eliminate aggressive polling.
+- **Pipeline Integration Test Suites**:
+  - `tests/integration/test_document_pipeline.py`: Tests project creation, upload intent, confirm, and document query endpoints.
+  - `tests/integration/test_qc_execution_pipeline.py`: Tests end-to-end background worker processing, finding persistence in database, credit deductions, SSE progress stream, and 402 credit exhaustion block.
+  - Test result: **35/35 tests passed across all suites**.
+
+---
+
 ## [Phase 4: Authentication, RBAC & Multi-Tenancy] — 2026-09-25
 
 ### Added
